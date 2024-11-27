@@ -34,8 +34,8 @@ ADDR_TORQUE_ENABLE          = 64
 ADDR_OP_MODE                = 11
 ADDR_GOAL_POSITION          = 116
 ADDR_PRESENT_POSITION       = 132
-DXL_MINIMUM_POSITION_VALUE  = 600
-DXL_MAXIMUM_POSITION_VALUE  = 3000
+DXL_MINIMUM_POSITION_VALUE  = 400
+DXL_MAXIMUM_POSITION_VALUE  = 3400
 BAUDRATE                    = 57600
 PROTOCOL_VERSION            = 2.0
 DXL_ID                      = 1
@@ -43,7 +43,7 @@ DEVICENAME                  = '/dev/ttyUSB0'
 
 TORQUE_ENABLE               = 1
 TORQUE_DISABLE              = 0
-DXL_MOVING_STATUS_THRESHOLD = 1
+DXL_MOVING_STATUS_THRESHOLD = 10
 
 POSITION_CONTROL            = 3   # Value for switching to position control mode
 
@@ -96,54 +96,56 @@ else:
     print("Torque is enabled.")
 
 #Turn LED ON
-led = LED(27)
-led.on()
+#led = LED(27)
+#led.on()
 
 # Main loop to move to a desired position
 try:
     while True:
         print("Press any key to continue or press ESC to quit:")        
-        sample, timestamp = inlet.pull_sample()
-        if getch() == 'esc':
+        if getch() == chr(0x1b):
             break
 
         try:
-            target_position = int(float(sample[0]) * (float(DXL_MAXIMUM_POSITION_VALUE - DXL_MINIMUM_POSITION_VALUE)) + float(DXL_MINIMUM_POSITION_VALUE))  # convert input to integer
+            while True:    
+                sample, timestamp = inlet.pull_sample()
+                target_position = int(float(sample[0]) * (float(DXL_MAXIMUM_POSITION_VALUE - DXL_MINIMUM_POSITION_VALUE)) + float(DXL_MINIMUM_POSITION_VALUE))  # convert input to integer
+                target_position_deg = target_position * pos_unit
 
-            #if target_position < DXL_MINIMUM_POSITION_VALUE or target_position > DXL_MAXIMUM_POSITION_VALUE:
-            #    print(f"Position must be between {DXL_MINIMUM_POSITION_VALUE} and {DXL_MAXIMUM_POSITION_VALUE}")
-            #    continue
+                #if target_position < DXL_MINIMUM_POSITION_VALUE or target_position > DXL_MAXIMUM_POSITION_VALUE:
+                #    print(f"Position must be between {DXL_MINIMUM_POSITION_VALUE} and {DXL_MAXIMUM_POSITION_VALUE}")
+                #    continue
 
-            # Send the goal position command
-            dxl_comm_result, dxl_error = packetHandler.write4ByteTxRx(portHandler, DXL_ID, ADDR_GOAL_POSITION, target_position)
-            if dxl_comm_result != COMM_SUCCESS:
-                print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
-            elif dxl_error != 0:
-                print("%s" % packetHandler.getRxPacketError(dxl_error))
-            else:
-                print(f"Motor is moving to position {target_position * pos_unit}.")
-            
-            # Wait until the motor reaches the target position
-            while True:
-                dxl_present_position, dxl_comm_result, dxl_error = packetHandler.read4ByteTxRx(portHandler, DXL_ID, ADDR_PRESENT_POSITION)
+                # Send the goal position command
+                dxl_comm_result, dxl_error = packetHandler.write4ByteTxRx(portHandler, DXL_ID, ADDR_GOAL_POSITION, target_position)
                 if dxl_comm_result != COMM_SUCCESS:
                     print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
                 elif dxl_error != 0:
                     print("%s" % packetHandler.getRxPacketError(dxl_error))
                 else:
-                    dxl_present_position_deg = dxl_present_position * pos_unit  # convert to degrees
-                    print(f"Current position: {dxl_present_position_deg} degrees")
-                    if abs(dxl_present_position - target_position) <= DXL_MOVING_STATUS_THRESHOLD:
-                        print(f"Motor has reached the target position {target_position}.")
-                        break
-                time.sleep(0.1)  # Small delay before checking again
+                    print(f"Motor is moving to position {round(target_position_deg, 2)} deg")
+                
+                # Wait until the motor reaches the target position
+                while True:
+                    dxl_present_position, dxl_comm_result, dxl_error = packetHandler.read4ByteTxRx(portHandler, DXL_ID, ADDR_PRESENT_POSITION)
+                    if dxl_comm_result != COMM_SUCCESS:
+                        print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
+                    elif dxl_error != 0:
+                        print("%s" % packetHandler.getRxPacketError(dxl_error))
+                    else:
+                        dxl_present_position_deg = dxl_present_position * pos_unit  # convert to degrees
+                        print(f"Current position: {round(dxl_present_position_deg, 2)} deg")
+                        if abs(dxl_present_position - target_position) <= DXL_MOVING_STATUS_THRESHOLD:
+                            print(f"Motor has reached the target position {round(target_position_deg, 2)} deg")
+                            break
+                    time.sleep(0.1)  # Small delay before checking again
 
         except ValueError:
             print("Invalid input. Please enter a valid integer position.")
 
 except KeyboardInterrupt:
     print("Program interrupted")
-    led.off()
+    #led.off()
 
 finally:            
     # Disable Dynamixel Torque before closing the port
