@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+ #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 
@@ -34,7 +34,7 @@ ADDR_TORQUE_ENABLE          = 64
 ADDR_OP_MODE                = 11
 ADDR_GOAL_POSITION          = 116
 ADDR_PRESENT_POSITION       = 132
-DXL_MINIMUM_POSITION_VALUE  = 500
+DXL_MINIMUM_POSITION_VALUE  = 550
 DXL_MAXIMUM_POSITION_VALUE  = 3400
 BAUDRATE                    = 57600
 PROTOCOL_VERSION            = 2.0
@@ -141,14 +141,17 @@ led.on()
 # Main loop to move to a desired position
 try:
     while True:
+        target_position = 2000
         print("Press any key to continue or press ESC to quit:")        
         if getch() == chr(0x1b):
             break
 
         try:
             while True:    
-                sample, timestamp = inlet.pull_sample()
-                target_position = int(float(sample[0]) * (float(DXL_MAXIMUM_POSITION_VALUE - DXL_MINIMUM_POSITION_VALUE)) + float(DXL_MINIMUM_POSITION_VALUE))  # convert input to integer
+                sample, timestamp = inlet.pull_sample(timeout=1.0)
+                if sample is not None:
+                    target_position = int(float(sample[0]) * (float(DXL_MAXIMUM_POSITION_VALUE - DXL_MINIMUM_POSITION_VALUE)) + float(DXL_MINIMUM_POSITION_VALUE))  # convert input to integer
+                    
                 target_position_deg = target_position * pos_unit
 
                 if target_position < DXL_MINIMUM_POSITION_VALUE or target_position > DXL_MAXIMUM_POSITION_VALUE:

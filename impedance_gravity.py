@@ -522,6 +522,8 @@ while 1:
                 
     except KeyboardInterrupt:
         print("Loop ended.")
+
+    finally:
         t_wd = perf_counter()
 
         # Close port
