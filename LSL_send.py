@@ -31,7 +31,7 @@ PROTOCOL_VERSION = 2.0  # Dynamixel protocol version (1.0 or 2.0)
 ADDR_PRESENT_POSITION = 132  # Address for reading current position (for Dynamixel Pro series, use 132)
 ADDR_PRESENT_CURRENT = 126
 ADDR_PRESENT_VELOCITY = 128
-LENGTH = 4  # Length of the data (4 bytes for position data)
+
 
 # Setup UDP communication (PC IP address and port)
 #UDP_IP = "192.168.1.44"  # Replace with your PC's IP address
@@ -39,7 +39,7 @@ LENGTH = 4  # Length of the data (4 bytes for position data)
 
 # Unit conversion
 pos_unit = 360/4095         # [deg] = [dxl_unit] * [pos_unit]
-vel_unit = 2 * np.pi/60     # [rad/s]
+vel_unit = 0.229 * np.pi/30     # [rad/s]
 cur_unit = 2.69             # [mA]
 
 
