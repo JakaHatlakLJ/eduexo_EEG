@@ -128,7 +128,7 @@ def start_system():
         print("%s" % packetHandler.getRxPacketError(dxl_error))
     else:
         print("Current limit has been set.")
-    
+
     # Clear Bus Watchdog
     dxl_comm_result, dxl_error = packetHandler.write1ByteTxRx(portHandler, DXL_ID, ADDR_WATCHDOG, watchdog_clear)
     if dxl_comm_result != COMM_SUCCESS:
@@ -161,32 +161,10 @@ def position_read():
             print(f'Error in position_read: {e}')
             break
 
-def velocity_read():
-    while not stop_event.is_set():
-        try:
-            # Read present position
-            with dxl_lock:
-                dxl_present_velocity, dxl_comm_result, dxl_error = packetHandler.read4ByteTxRx(portHandler, DXL_ID, ADDR_PRESENT_VELOCITY)
-                if dxl_comm_result != COMM_SUCCESS:
-                    print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
-                elif dxl_error != 0:
-                    print("%s" % packetHandler.getRxPacketError(dxl_error))
-            b2 = dxl_present_velocity.to_bytes(4, byteorder=sys.byteorder, signed = False) 
-            dxl_present_velocity = int.from_bytes(b2, byteorder=sys.byteorder, signed = True)
-            with velocity_lock:
-                # global dxl_present_velocity_rad
-                # dxl_present_velocity_rad = dxl_present_velocity * vel_unit * np.pi/30            #[rad/s]
-                global  dxl_present_velocity_deg
-                dxl_present_velocity_deg = float(dxl_present_velocity) * vel_unit * 6.0     # [deg/s]
-            pass
-        except Exception as e:
-            print(f'Error in velocity_read: {e}')
-            break
-
 
 # LOCKER INITIALIZATION
 position_lock = threading.Lock()
-velocity_lock = threading.Lock()
+#velocity_lock = threading.Lock()
 dxl_lock = threading.Lock()
 
 t_print = 0.1
@@ -201,9 +179,9 @@ while 1:
         break
     
     # Get user input for spring and damper coefficients and enable/disable gravity compensation
-    K_s = input('Enter spring coefficient value in Nm/deg and press Enter (default 0.07)\n')
+    K_s = input('Enter spring coefficient value in Nm/deg and press Enter (default 0.08)\n')
     if K_s == "": # if there is no input set a default
-        K_s = "0.07"
+        K_s = "0.08"
     print('Spring coefficient = '+K_s+"Nm/deg")    
     K_s = float(K_s)
 
@@ -226,12 +204,10 @@ while 1:
 
     t0 = t1 = t5 = perf_counter() # Used for results printing timing
 
-
+    dxl_present_position_deg = 0
     # Initialize threads 
     position_thread = threading.Thread(target = position_read, daemon = True)
     position_thread.start()
-    velocity_thread = threading.Thread(target = velocity_read, daemon = True)
-    velocity_thread.start()
 
     try:   
              
@@ -248,20 +224,31 @@ while 1:
         dxl_present_velocity_main_deg = 0 #velocity for initial calculation
         b = perf_counter()
 
+        with position_lock:
+            dxl_present_position_main_deg = dxl_present_position_deg
+
         while 1:
             
+            # Loop timing
+            t4 = perf_counter()-t5
+            t5 = perf_counter()
+
+
+            # Save previous position for velocity calculation
+            dxl_present_position_old = dxl_present_position_main_deg
+
             # Read present position     
             with position_lock:
                 dxl_present_position_main_deg = dxl_present_position_deg
-            # with velocity_lock:
-            #     dxl_present_velocity_main_deg = dxl_present_velocity_deg    
+
+            dxl_present_velocity = (dxl_present_position_main_deg-dxl_present_position_old)/t4    # [deg/s]
             
             # Calculate goal current
             if (dxl_present_position_main_deg<min_pos or dxl_present_position_main_deg>max_pos):           # Check if position is within position limits 
                 dxl_goal_current = 0
                 dxl_goal_torque = 0
             else:
-                dxl_goal_torque = -K_s*(dxl_present_position_main_deg-dxl_position_offset)-K_d*(dxl_present_velocity_main_deg) + T_d # [Nm] Torque should point in opposite direction as displacement
+                dxl_goal_torque = -K_s*(dxl_present_position_main_deg-dxl_position_offset)-K_d*(dxl_present_velocity) + T_d # [Nm] Torque should point in opposite direction as displacement
                 dxl_goal_current = 8.247191-8.247191*np.sqrt(1-0.082598*dxl_goal_torque)     # [A]
                 dxl_goal_current = dxl_goal_current * 1000                                   # [mA]
                 dxl_goal_current = round(dxl_goal_current / cur_unit)                        # [dxl units]
@@ -280,49 +267,16 @@ while 1:
                 break
             t2 = perf_counter() -t1  #Used for results printing timing
 
-            with velocity_lock:
-                dxl_present_velocity_main_deg = dxl_present_velocity_deg
+
         
             a += 1
             
-
-            # Loop timing
-            # t4 = perf_counter()-t5
-            # t5 = perf_counter()
-            # print(f'Loop time: {t4}')
-
-            # if (t2>t_print):
-            #     t1 = perf_counter()
-            #     # Read present current 
-            #     with dxl_lock:   
-            #         dxl_present_current, dxl_comm_result2, dxl_error2 = packetHandler.read2ByteTxRx(portHandler, DXL_ID, ADDR_PRESENT_CURRENT)
-            #         if dxl_comm_result2 != COMM_SUCCESS:
-            #             print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
-            #         elif dxl_error2 != 0:
-            #             print("%s" % packetHandler.getRxPacketError(dxl_error))
-            #     b3 = dxl_present_current.to_bytes(2, byteorder=sys.byteorder, signed = False) 
-            #     dxl_present_current = int.from_bytes(b3, byteorder=sys.byteorder, signed = True) # [dxl units]
-            #     dxl_present_current = dxl_present_current * cur_unit # [mA]
-            #     dxl_present_current = dxl_present_current/1000       # [A]
-            #     dxl_present_torque =  2.936*dxl_present_current - 0.178*dxl_present_current**2 #[Nm]
-                            
-            #     # Loop timing
-            #     t4 = perf_counter()-t5
-            #     t5 = perf_counter()
-
-            #     # Elapsed time from the start of the program
-            #     t3 = -(t0-perf_counter())
-            #     # Print results
-            #     print("SpringCoeff: %.4f Nm/deg  DampingCoeff: %.4f Nm*s/deg  PresPos: %.4f deg  PresVel: %.4f deg/s  GoalTorque: %.4f Nm  PresTorque: %.4f Nm Time: %.4f s Loop Time: %.4f s " % (K_s, K_d, dxl_present_position_main_deg, dxl_present_velocity_main_deg, dxl_goal_torque, dxl_present_torque, t3, t4))
-            #     print(ard_line)
-
 
     except KeyboardInterrupt:
         print("Loop ended.")
 
         stop_event.set()
         position_thread.join()
-        velocity_thread.join()
         stop_event.clear()
         
         print(f'Average loop frequency was: {a/(perf_counter() - b)}Hz')
@@ -330,8 +284,8 @@ while 1:
     finally:
         stop_event.set()
         position_thread.join()
-        velocity_thread.join()
         stop_event.clear()
+
 
         # Set goal current to 0
         dxl_goal_current = 0
