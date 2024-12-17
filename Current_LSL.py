@@ -37,8 +37,6 @@ ADDR_PRESENT_POSITION       = 132
 ADDR_PRESENT_CURRENT        = 126
 ADDR_PRESENT_VELOCITY       = 128
 ADDR_GOAL_CURRENT           = 102
-# DXL_MINIMUM_POSITION_VALUE  = 500
-# DXL_MAXIMUM_POSITION_VALUE  = 3400
 BAUDRATE                    = 57600
 PROTOCOL_VERSION            = 2.0
 DXL_ID                      = 1
@@ -70,32 +68,48 @@ max_current = round(max_current / cur_unit)                              # [dxl 
 T_d = 0.0
 
 # Position offset and limits values
-dxl_position_offset = 90.0   # [deg] Torque/current is 0 at this position
+dxl_goal_position = 90.0     # [deg] Torque/current is 0 at this position
 min_pos = 55.0               # [deg] Torque/current is set to 0 if limit is exceeded
 max_pos = 180.0              # [deg] Torque/current is set to 0 if limit is exceeded
+DXL_MINIMUM_POSITION_VALUE  = round(min_pos / pos_unit)
+DXL_MAXIMUM_POSITION_VALUE  = round(max_pos / pos_unit)
+target_position = 90
 
 # Initial settings (later replaced by user input values)
 K_s = 0.00                   # [Nm/deg] Initial spring coefficient
 K_d = 0.00
 
+print_param = False # Set to True if printing present parameters is desired
 ard_line = 0
-
-stop_event = threading.Event() #Flag for signaling threads to stop
 
 #setup LED
 led = LED(27)
 
+# LOCKER INITIALIZATION
+position_lock = threading.Lock()
+velocity_lock = threading.Lock()
+dxl_lock = threading.Lock()
+stop_event = threading.Event() #Flag for signaling threads to stop
+
 #Lab Streaming Layer setup
-#streams = resolve_stream('type', 'EEG')         # Resolve a stream
-#inlet = StreamInlet(streams[0])                 # Create an inlet
-#print("Receiving data...")
+streams = resolve_stream('type', 'EEG')         # Resolve a stream
+inlet = StreamInlet(streams[0])                 # Create an inlet
+print("Receiving data...")
+
+# Initialize Dynamixel and ports
+global portHandler, packetHandler
+portHandler = PortHandler(DEVICENAME)
+packetHandler = PacketHandler(PROTOCOL_VERSION)
+port_num = PortHandler(DEVICENAME)
 
 #Function to initalize Dynamixel Motor
 def start_system():
-    # Initialize Dynamixel and ports
-    global portHandler, packetHandler
-    portHandler = PortHandler(DEVICENAME)
-    packetHandler = PacketHandler(PROTOCOL_VERSION)
+    '''Function for seting up motor:
+        - Open port
+        - Set Baudrate
+        - Set operating mode to current control
+        - Set current limit
+        - Clear Bus Watchdog'''
 
     # Open port
     if portHandler.openPort():
@@ -111,24 +125,60 @@ def start_system():
         print("Failed to change the baudrate")
         sys.exit()
 
-    # Set operating mode to current control
-    dxl_comm_result, dxl_error = packetHandler.write1ByteTxRx(portHandler, DXL_ID, ADDR_OP_MODE, CURRENT_CONTROL)
-    if dxl_comm_result != COMM_SUCCESS:
-        print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
-    elif dxl_error != 0:
-        print("%s" % packetHandler.getRxPacketError(dxl_error))
-    else:
-        print("Operating mode has been switched to current control.")
+    with dxl_lock:
+        # Set operating mode to current control
+        dxl_comm_result, dxl_error = packetHandler.write1ByteTxRx(portHandler, DXL_ID, ADDR_OP_MODE, CURRENT_CONTROL)
+        if dxl_comm_result != COMM_SUCCESS:
+            print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
+        elif dxl_error != 0:
+            print("%s" % packetHandler.getRxPacketError(dxl_error))
+        else:
+            print("Operating mode has been switched to current control.")
 
-    # Set the current limit
-    dxl_comm_result, dxl_error = packetHandler.write2ByteTxRx(portHandler, DXL_ID, ADDR_CURRENT_LIMIT, max_current)
+        # Set the current limit
+        dxl_comm_result, dxl_error = packetHandler.write2ByteTxRx(portHandler, DXL_ID, ADDR_CURRENT_LIMIT, max_current)
+        if dxl_comm_result != COMM_SUCCESS:
+            print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
+        elif dxl_error != 0:
+            print("%s" % packetHandler.getRxPacketError(dxl_error))
+        else:
+            print("Current limit has been set.")
+
+        # Clear Bus Watchdog
+        dxl_comm_result, dxl_error = packetHandler.write1ByteTxRx(portHandler, DXL_ID, ADDR_WATCHDOG, watchdog_clear)
+        if dxl_comm_result != COMM_SUCCESS:
+            print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
+        elif dxl_error != 0:
+            print("%s" % packetHandler.getRxPacketError(dxl_error))
+        else:
+            print(f"Watchdog is cleared.")
+
+def torque_watchdog():
+    '''Function for enabling Torque and setting Bus Watchdog'''       
+    # Enable Dynamixel Torque
+    dxl_comm_result, dxl_error = packetHandler.write1ByteTxRx(portHandler, DXL_ID, ADDR_TORQUE_ENABLE, TORQUE_ENABLE)
     if dxl_comm_result != COMM_SUCCESS:
         print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
     elif dxl_error != 0:
         print("%s" % packetHandler.getRxPacketError(dxl_error))
     else:
-        print("Current limit has been set.")
-    
+        print("Torque is enabled.")
+        led.on() #Turn LED ON
+
+    # Enable Bus Watchdog
+    dxl_comm_result, dxl_error = packetHandler.write1ByteTxRx(portHandler, DXL_ID, ADDR_WATCHDOG, watchdog_time)
+    if dxl_comm_result != COMM_SUCCESS:
+        print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
+    elif dxl_error != 0:
+        print("%s" % packetHandler.getRxPacketError(dxl_error))
+    else:
+        print(f"Watchdog is set to {watchdog_time*20} ms.")
+        
+def stop_system():
+    '''Function for stoping motor safely:
+        - Disable Bus Watchdog
+        - Set goal Current to 0
+        - Disable torque'''    
     # Clear Bus Watchdog
     dxl_comm_result, dxl_error = packetHandler.write1ByteTxRx(portHandler, DXL_ID, ADDR_WATCHDOG, watchdog_clear)
     if dxl_comm_result != COMM_SUCCESS:
@@ -136,10 +186,29 @@ def start_system():
     elif dxl_error != 0:
         print("%s" % packetHandler.getRxPacketError(dxl_error))
     else:
-        print(f"Watchdog is cleared.")
+        print(f"Watchdog is disabled.")
 
-# Function fo reading current position of motor
+    # Set goal current to 0
+    dxl_comm_result, dxl_error = packetHandler.write2ByteTxRx(portHandler, DXL_ID, ADDR_GOAL_CURRENT, 0)
+    if dxl_comm_result != COMM_SUCCESS:
+        print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
+    elif dxl_error != 0:
+        print("%s" % packetHandler.getRxPacketError(dxl_error))
+    else:
+        print("Goal current is set to 0.")
+
+    # Disable Dynamixel Torque
+    dxl_comm_result, dxl_error = packetHandler.write1ByteTxRx(portHandler, DXL_ID, ADDR_TORQUE_ENABLE, TORQUE_DISABLE)
+    if dxl_comm_result != COMM_SUCCESS:
+        print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
+    elif dxl_error != 0:
+        print("%s" % packetHandler.getRxPacketError(dxl_error))
+    else:
+        print("Torque is disabled.")
+        led.off()# Turn LED off
+
 def position_read():
+    '''Function for reading current position of motor'''
     while not stop_event.is_set():
         try:    
             # Read present position
@@ -162,6 +231,7 @@ def position_read():
             break
 
 def velocity_read():
+    '''Function for reading current velocity of motor'''
     while not stop_event.is_set():
         try:
             # Read present position
@@ -183,22 +253,37 @@ def velocity_read():
             print(f'Error in velocity_read: {e}')
             break
 
+def write_current(goal_cur):
+    '''Functiong for writing goal current to motor'''
+    with dxl_lock:
+        dxl_comm_result, dxl_error = packetHandler.write2ByteTxRx(portHandler, DXL_ID, ADDR_GOAL_CURRENT, goal_cur)
+        if dxl_comm_result != COMM_SUCCESS:
+            print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
+        elif dxl_error != 0:
+            print("%s" % packetHandler.getRxPacketError(dxl_error))
 
-# LOCKER INITIALIZATION
-position_lock = threading.Lock()
-velocity_lock = threading.Lock()
-dxl_lock = threading.Lock()
+def position_get():
+    while 1:
+        sample, timestamp = inlet.pull_sample(timeout=1.0)
+
+        if sample is not None:
+            b3 = int(float(sample[0]) * (float(DXL_MAXIMUM_POSITION_VALUE - DXL_MINIMUM_POSITION_VALUE)) + float(DXL_MINIMUM_POSITION_VALUE))  # convert input to integer
+            global target_position
+            target_position = b3 * pos_unit
+
+# if target_position < DXL_MINIMUM_POSITION_VALUE or target_position > DXL_MAXIMUM_POSITION_VALUE:
+#     print(f"Position must be between {DXL_MINIMUM_POSITION_VALUE} and {DXL_MAXIMUM_POSITION_VALUE}, your value {target_position}")
+#     break
 
 t_print = 0.1
 
 while 1:
-    start_system() #Initialize motor each time the main loop starts
-    a = 0
-
     # Start of new loop
     print("Press any key to continue! (or press ESC to quit!)")
     if getch() ==chr(0x1b):
         break
+
+    start_system() #Initialize motor
     
     # Get user input for spring and damper coefficients and enable/disable gravity compensation
     K_s = input('Enter spring coefficient value in Nm/deg and press Enter (default 0.07)\n')
@@ -213,40 +298,26 @@ while 1:
     print('Damping coefficient = '+K_d+"Nm*s/deg")    
     K_d = float(K_d)
 
-    # Enable Dynamixel Torque
-    dxl_comm_result, dxl_error = packetHandler.write1ByteTxRx(portHandler, DXL_ID, ADDR_TORQUE_ENABLE, TORQUE_ENABLE)
-    if dxl_comm_result != COMM_SUCCESS:
-        print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
-    elif dxl_error != 0:
-        print("%s" % packetHandler.getRxPacketError(dxl_error))
-    else:
-        print("Torque is enabled.")
-    
-    led.on() #Turn LED ON
-
     t0 = t1 = t5 = perf_counter() # Used for results printing timing
-
 
     # Initialize threads 
     position_thread = threading.Thread(target = position_read, daemon = True)
     position_thread.start()
     velocity_thread = threading.Thread(target = velocity_read, daemon = True)
     velocity_thread.start()
+    Recieved_position_thread = threading.Thread(target = position_get, daemon=True)
+    Recieved_position_thread.start()
 
-    try:   
-             
-        # Enable Bus Watchdog
+    try:
+        #enable Torque and set Bus Watchdog
         with dxl_lock:
-            dxl_comm_result, dxl_error = packetHandler.write1ByteTxRx(portHandler, DXL_ID, ADDR_WATCHDOG, watchdog_time)
-            if dxl_comm_result != COMM_SUCCESS:
-                print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
-            elif dxl_error != 0:
-                print("%s" % packetHandler.getRxPacketError(dxl_error))
-            else:
-                print(f"Watchdog is set to {watchdog_time*20} ms.")
-
+            torque_watchdog()
+                
         dxl_present_velocity_main_deg = 0 #velocity for initial calculation
-        b = perf_counter()
+        recieved_position = 0
+
+        a = 0 # Loop counter
+        b = perf_counter() # Loop Timer
 
         while 1:
             
@@ -254,108 +325,117 @@ while 1:
             with position_lock:
                 dxl_present_position_main_deg = dxl_present_position_deg
             # with velocity_lock:
-            #     dxl_present_velocity_main_deg = dxl_present_velocity_deg    
+            #     dxl_present_velocity_main_deg = dxl_present_velocity_deg 
+
+            recieved_position = target_position
+            if recieved_position is not None:
+                dxl_goal_position = recieved_position
             
             # Calculate goal current
-            if (dxl_present_position_main_deg<min_pos or dxl_present_position_main_deg>max_pos):           # Check if position is within position limits 
+            if (dxl_present_position_deg<min_pos or dxl_present_position_deg>max_pos):           # Check if position is within position limits 
                 dxl_goal_current = 0
                 dxl_goal_torque = 0
+                write_current(0)
             else:
-                dxl_goal_torque = -K_s*(dxl_present_position_main_deg-dxl_position_offset)-K_d*(dxl_present_velocity_main_deg) + T_d # [Nm] Torque should point in opposite direction as displacement
+                dxl_goal_torque = -K_s*(dxl_present_position_main_deg-dxl_goal_position)-K_d*(dxl_present_velocity_main_deg) + T_d # [Nm] Torque should point in opposite direction as displacement
                 dxl_goal_current = 8.247191-8.247191*np.sqrt(1-0.082598*dxl_goal_torque)     # [A]
                 dxl_goal_current = dxl_goal_current * 1000                                   # [mA]
                 dxl_goal_current = round(dxl_goal_current / cur_unit)                        # [dxl units]
             
-            # Write goal current
-            if -max_current<dxl_goal_current<max_current:   # Check if goal current is within current limits
-                with dxl_lock:
-                    dxl_comm_result, dxl_error = packetHandler.write2ByteTxRx(portHandler, DXL_ID, ADDR_GOAL_CURRENT, dxl_goal_current)
-                    if dxl_comm_result != COMM_SUCCESS:
-                        print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
-                    elif dxl_error != 0:
-                        print("%s" % packetHandler.getRxPacketError(dxl_error))
-                dxl_goal_current = dxl_goal_current * cur_unit  # [mA]
-            else:
-                print("Goal current is too high.")
-                break
+                # Write goal current
+                if -max_current<dxl_goal_current<max_current:   # Check if goal current is within current limits
+                    write_current(dxl_goal_current)
+                    # dxl_goal_current = dxl_goal_current * cur_unit  # [mA]
+                else:
+                    print("Goal current is too high.")
+                    break
+
             t2 = perf_counter() -t1  #Used for results printing timing
 
             with velocity_lock:
                 dxl_present_velocity_main_deg = dxl_present_velocity_deg
         
             a += 1
-            
+            if print_param is True:
+                # Loop timing
+                t4 = perf_counter()-t5
+                t5 = perf_counter()
+                print(f'Loop time: {t4}')
 
-            # Loop timing
-            # t4 = perf_counter()-t5
-            # t5 = perf_counter()
-            # print(f'Loop time: {t4}')
+                if (t2>t_print):
+                    t1 = perf_counter()
+                    # Read present current 
+                    with dxl_lock:   
+                        dxl_present_current, dxl_comm_result2, dxl_error2 = packetHandler.read2ByteTxRx(portHandler, DXL_ID, ADDR_PRESENT_CURRENT)
+                        if dxl_comm_result2 != COMM_SUCCESS:
+                            print("%s" % packetHandler.getTxRxResult(dxl_comm_result2))
+                        elif dxl_error2 != 0:
+                            print("%s" % packetHandler.getRxPacketError(dxl_error2))
+                    b3 = dxl_present_current.to_bytes(2, byteorder=sys.byteorder, signed = False) 
+                    dxl_present_current = int.from_bytes(b3, byteorder=sys.byteorder, signed = True) # [dxl units]
+                    dxl_present_current = dxl_present_current * cur_unit # [mA]
+                    dxl_present_current = dxl_present_current/1000       # [A]
+                    dxl_present_torque =  2.936*dxl_present_current - 0.178*dxl_present_current**2 #[Nm]
+                                
+                    # Loop timing
+                    t4 = perf_counter()-t5
+                    t5 = perf_counter()
 
-            # if (t2>t_print):
-            #     t1 = perf_counter()
-            #     # Read present current 
-            #     with dxl_lock:   
-            #         dxl_present_current, dxl_comm_result2, dxl_error2 = packetHandler.read2ByteTxRx(portHandler, DXL_ID, ADDR_PRESENT_CURRENT)
-            #         if dxl_comm_result2 != COMM_SUCCESS:
-            #             print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
-            #         elif dxl_error2 != 0:
-            #             print("%s" % packetHandler.getRxPacketError(dxl_error))
-            #     b3 = dxl_present_current.to_bytes(2, byteorder=sys.byteorder, signed = False) 
-            #     dxl_present_current = int.from_bytes(b3, byteorder=sys.byteorder, signed = True) # [dxl units]
-            #     dxl_present_current = dxl_present_current * cur_unit # [mA]
-            #     dxl_present_current = dxl_present_current/1000       # [A]
-            #     dxl_present_torque =  2.936*dxl_present_current - 0.178*dxl_present_current**2 #[Nm]
-                            
-            #     # Loop timing
-            #     t4 = perf_counter()-t5
-            #     t5 = perf_counter()
-
-            #     # Elapsed time from the start of the program
-            #     t3 = -(t0-perf_counter())
-            #     # Print results
-            #     print("SpringCoeff: %.4f Nm/deg  DampingCoeff: %.4f Nm*s/deg  PresPos: %.4f deg  PresVel: %.4f deg/s  GoalTorque: %.4f Nm  PresTorque: %.4f Nm Time: %.4f s Loop Time: %.4f s " % (K_s, K_d, dxl_present_position_main_deg, dxl_present_velocity_main_deg, dxl_goal_torque, dxl_present_torque, t3, t4))
-            #     print(ard_line)
-
+                    # Elapsed time from the start of the program
+                    t3 = -(t0-perf_counter())
+                    # Print results
+                    print("SpringCoeff: %.4f Nm/deg  DampingCoeff: %.4f Nm*s/deg  PresPos: %.4f deg  PresVel: %.4f deg/s  GoalTorque: %.4f Nm  PresTorque: %.4f Nm Time: %.4f s Loop Time: %.4f s " % (K_s, K_d, dxl_present_position_main_deg, dxl_present_velocity_main_deg, dxl_goal_torque, dxl_present_torque, t3, t4))
+                    print(ard_line)
 
     except KeyboardInterrupt:
-        print("Loop ended.")
-
-        stop_event.set()
-        position_thread.join()
-        velocity_thread.join()
-        stop_event.clear()
-        
-        print(f'Average loop frequency was: {a/(perf_counter() - b)}Hz')
+        print("Loop ended.")        
+        print(f'Average loop frequency was: {round(a/(perf_counter() - b), 2)}Hz')
 
     finally:
         stop_event.set()
         position_thread.join()
         velocity_thread.join()
         stop_event.clear()
-
-        # Set goal current to 0
-        dxl_goal_current = 0
-        with dxl_lock:
-            dxl_comm_result, dxl_error = packetHandler.write2ByteTxRx(portHandler, DXL_ID, ADDR_GOAL_CURRENT, dxl_goal_current)
-            if dxl_comm_result != COMM_SUCCESS:
-                print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
-            elif dxl_error != 0:
-                print("%s" % packetHandler.getRxPacketError(dxl_error))
-            else:
-                print("Goal current is set to 0.")
         
-        # Disable Dynamixel Torque
         with dxl_lock:
-            dxl_comm_result, dxl_error = packetHandler.write1ByteTxRx(portHandler, DXL_ID, ADDR_TORQUE_ENABLE, TORQUE_DISABLE)
-            if dxl_comm_result != COMM_SUCCESS:
-                print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
-            elif dxl_error != 0:
-                print("%s" % packetHandler.getRxPacketError(dxl_error))
-            else:
-                print("Torque is disabled.")
+            stop_system()
 
-        # Close port
-        portHandler.closePort()
-        
-        # Turn LED off
-        led.off()
+        # Reboot and Close port
+        with dxl_lock:
+            portHandler.clearPort()
+            #packetHandler.factoryReset(portHandler, DXL_ID, CURRENT_CONTROL)
+            portHandler.closePort()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                    
+
+
