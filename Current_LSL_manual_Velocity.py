@@ -203,8 +203,8 @@ while 1:
     led.on() #Turn LED ON
 
     t0 = t1 = t5 = perf_counter() # Used for results printing timing
+    # dxl_present_position_deg = 0 # Velocity for inital calculation
 
-    dxl_present_position_deg = 0
     # Initialize threads 
     position_thread = threading.Thread(target = position_read, daemon = True)
     position_thread.start()
@@ -222,7 +222,8 @@ while 1:
                 print(f"Watchdog is set to {watchdog_time*20} ms.")
 
         dxl_present_velocity_main_deg = 0 #velocity for initial calculation
-        b = perf_counter()
+        
+        b = perf_counter() #used for frequenccy calc
 
         with position_lock:
             dxl_present_position_main_deg = dxl_present_position_deg
