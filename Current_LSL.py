@@ -73,7 +73,8 @@ min_pos = 55.0               # [deg] Torque/current is set to 0 if limit is exce
 max_pos = 180.0              # [deg] Torque/current is set to 0 if limit is exceeded
 DXL_MINIMUM_POSITION_VALUE  = round(min_pos / pos_unit)
 DXL_MAXIMUM_POSITION_VALUE  = round(max_pos / pos_unit)
-target_position = 90
+recieved_position = 90
+recieved_torque = 0
 
 # Initial settings (later replaced by user input values)
 K_s = 0.00                   # [Nm/deg] Initial spring coefficient
@@ -268,8 +269,11 @@ def position_get():
 
         if sample is not None:
             b3 = int(float(sample[0]) * (float(DXL_MAXIMUM_POSITION_VALUE - DXL_MINIMUM_POSITION_VALUE)) + float(DXL_MINIMUM_POSITION_VALUE))  # convert input to integer
-            global target_position
-            target_position = b3 * pos_unit
+            b4 = int(sample[1])
+            global recieved_position
+            global recieved_torque
+            recieved_position = b3 * pos_unit
+            recieved_torque = b4
 
 # if target_position < DXL_MINIMUM_POSITION_VALUE or target_position > DXL_MAXIMUM_POSITION_VALUE:
 #     print(f"Position must be between {DXL_MINIMUM_POSITION_VALUE} and {DXL_MAXIMUM_POSITION_VALUE}, your value {target_position}")
@@ -314,7 +318,7 @@ while 1:
             torque_watchdog()
                 
         dxl_present_velocity_main_deg = 0 #velocity for initial calculation
-        recieved_position = 0
+        target_position = 0
 
         a = 0 # Loop counter
         b = perf_counter() # Loop Timer
@@ -327,9 +331,13 @@ while 1:
             # with velocity_lock:
             #     dxl_present_velocity_main_deg = dxl_present_velocity_deg 
 
-            recieved_position = target_position
-            if recieved_position is not None:
-                dxl_goal_position = recieved_position
+            target_position = recieved_position
+            if target_position is not None:
+                dxl_goal_position = target_position
+
+            target_torque = recieved_torque
+            if target_torque is not None:
+                T_d = target_torque
             
             # Calculate goal current
             if (dxl_present_position_deg<min_pos or dxl_present_position_deg>max_pos):           # Check if position is within position limits 

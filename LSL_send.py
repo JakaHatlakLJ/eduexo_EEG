@@ -48,7 +48,7 @@ cur_unit = 2.69             # [mA]
 #sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 # Create a new stream info
-info = StreamInfo('Stream_EXO', 'EEG', 4, 100, 'float32', 'test_LSL')
+info = StreamInfo('Stream_EXO', 'EEG', 4, 10000, 'float32', 'test_LSL')
 # Create an outlet
 outlet = StreamOutlet(info)
 
