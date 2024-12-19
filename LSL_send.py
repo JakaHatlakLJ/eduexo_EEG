@@ -48,7 +48,7 @@ cur_unit = 2.69             # [mA]
 #sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 # Create a new stream info
-info = StreamInfo('Stream_EXO', 'EEG', 4, 10000, 'float32', 'test_LSL')
+info = StreamInfo('Stream_EXO', 'EXO', 3, 10000, 'float32', 'test_LSL')
 # Create an outlet
 outlet = StreamOutlet(info)
 
@@ -116,7 +116,7 @@ try:
             current = get_motor_current()
             torque = 0.082598 * (1 - (1 - current * cur_unit / 8.247191)**2) #[mNm]
             
-            DATA = [position * pos_unit, velocity * vel_unit, current * cur_unit, torque]
+            DATA = [position * pos_unit, velocity * vel_unit, torque]
             # Send motor position data via stream
             outlet.push_sample(DATA)
             #message = str(position).encode('utf-8')

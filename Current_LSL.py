@@ -7,7 +7,7 @@ import sys
 from time import perf_counter
 import numpy as np
 from dynamixel_sdk import * 
-from pylsl import StreamInlet, resolve_stream
+from pylsl import StreamInlet, resolve_stream, StreamInfo, StreamOutlet
 from gpiozero import LED
 import threading
 
@@ -77,8 +77,8 @@ recieved_position = 90
 recieved_torque = 0
 
 # Initial settings (later replaced by user input values)
-K_s = 0.00                   # [Nm/deg] Initial spring coefficient
-K_d = 0.00
+K_s = 0.07                   # [Nm/deg] Initial spring coefficient
+K_d = 0.006
 
 print_param = False # Set to True if printing present parameters is desired
 ard_line = 0
@@ -89,13 +89,22 @@ led = LED(27)
 # LOCKER INITIALIZATION
 position_lock = threading.Lock()
 velocity_lock = threading.Lock()
+torque_lock = threading.Lock()
 dxl_lock = threading.Lock()
 stop_event = threading.Event() #Flag for signaling threads to stop
 
 #Lab Streaming Layer setup
-streams = resolve_stream('type', 'EEG')         # Resolve a stream
-inlet = StreamInlet(streams[0])                 # Create an inlet
+# Position and Torque
+stream_xT = resolve_stream('type', 'EEG')         # Resolve a stream
+inlet1 = StreamInlet(stream_xT[0])                 # Create an inlet
+# Parameters for Impdeance control (K_s, K_d)
+# stream_P = resolve_stream('type', 'EEG_KD')         # Resolve a stream
+# inlet2 = StreamInlet(stream_P[0])                 # Create an inlet
 print("Receiving data...")
+
+# Stream for sending motor data
+info = StreamInfo('Stream_EXO', 'EXO', 3, 10000, 'float32', 'test_LSL')
+outlet = StreamOutlet(info)
 
 # Initialize Dynamixel and ports
 global portHandler, packetHandler
@@ -208,11 +217,34 @@ def stop_system():
         print("Torque is disabled.")
         led.off()# Turn LED off
 
-def position_read():
-    '''Function for reading current position of motor'''
+def write_current(goal_cur):
+    '''Functiong for writing goal current to motor'''
+    with dxl_lock:
+        dxl_comm_result, dxl_error = packetHandler.write2ByteTxRx(portHandler, DXL_ID, ADDR_GOAL_CURRENT, goal_cur)
+        if dxl_comm_result != COMM_SUCCESS:
+            print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
+        elif dxl_error != 0:
+            print("%s" % packetHandler.getRxPacketError(dxl_error))
+
+def LSL_get():
     while not stop_event.is_set():
-        try:    
-            # Read present position
+        sample_xT, timestamp = inlet1.pull_sample(timeout=1.0)
+
+        if sample_xT is not None:
+            b4 = int(float(sample_xT[0]) * (float(DXL_MAXIMUM_POSITION_VALUE - DXL_MINIMUM_POSITION_VALUE)) + float(DXL_MINIMUM_POSITION_VALUE))  # convert input to integer
+            b5 = int(sample_xT[1])
+            global recieved_position
+            global recieved_torque
+            recieved_position = b4 * pos_unit
+            recieved_torque = b5
+
+def motor_data():
+    '''Function for reading current position, velocity and Torque of motor'''
+
+    while not stop_event.is_set():
+        try:
+
+            # Read present Position
             with dxl_lock:
                 dxl_present_position, dxl_comm_result, dxl_error = packetHandler.read4ByteTxRx(portHandler, DXL_ID, ADDR_PRESENT_POSITION)
                 if dxl_comm_result != COMM_SUCCESS:
@@ -227,15 +259,8 @@ def position_read():
                 #global  dxl_present_position_rad
                 #dxl_present_position_rad = (dxl_present_position_deg*np.pi)/180     # [rad]
             pass    
-        except Exception as e:
-            print(f'Error in position_read: {e}')
-            break
 
-def velocity_read():
-    '''Function for reading current velocity of motor'''
-    while not stop_event.is_set():
-        try:
-            # Read present position
+            # Read present Velocity
             with dxl_lock:
                 dxl_present_velocity, dxl_comm_result, dxl_error = packetHandler.read4ByteTxRx(portHandler, DXL_ID, ADDR_PRESENT_VELOCITY)
                 if dxl_comm_result != COMM_SUCCESS:
@@ -250,34 +275,28 @@ def velocity_read():
                 global  dxl_present_velocity_deg
                 dxl_present_velocity_deg = float(dxl_present_velocity) * vel_unit * 6.0     # [deg/s]
             pass
+
+            # Read present Current
+            with dxl_lock:
+                dxl_present_current, dxl_comm_result, dxl_error = packetHandler.read2ByteTxRx(portHandler, DXL_ID, ADDR_PRESENT_CURRENT)
+                if dxl_comm_result != COMM_SUCCESS:
+                    print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
+                elif dxl_error != 0:
+                    print("%s" % packetHandler.getRxPacketError(dxl_error))
+            b3 = dxl_present_current.to_bytes(2, byteorder=sys.byteorder, signed = False) 
+            dxl_present_current = int.from_bytes(b3, byteorder=sys.byteorder, signed = True)
+            with torque_lock:
+                global  dxl_present_torque
+                dxl_present_torque = 0.082598 * (1 - (1 - dxl_present_current * cur_unit / 8.247191)**2)    # [mNm]
+            pass
+
+            DATA = [dxl_present_position_deg, dxl_present_velocity_deg, dxl_present_torque]
+            # Send motor position data via stream
+            outlet.push_sample(DATA)
+
         except Exception as e:
             print(f'Error in velocity_read: {e}')
             break
-
-def write_current(goal_cur):
-    '''Functiong for writing goal current to motor'''
-    with dxl_lock:
-        dxl_comm_result, dxl_error = packetHandler.write2ByteTxRx(portHandler, DXL_ID, ADDR_GOAL_CURRENT, goal_cur)
-        if dxl_comm_result != COMM_SUCCESS:
-            print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
-        elif dxl_error != 0:
-            print("%s" % packetHandler.getRxPacketError(dxl_error))
-
-def position_get():
-    while 1:
-        sample, timestamp = inlet.pull_sample(timeout=1.0)
-
-        if sample is not None:
-            b3 = int(float(sample[0]) * (float(DXL_MAXIMUM_POSITION_VALUE - DXL_MINIMUM_POSITION_VALUE)) + float(DXL_MINIMUM_POSITION_VALUE))  # convert input to integer
-            b4 = int(sample[1])
-            global recieved_position
-            global recieved_torque
-            recieved_position = b3 * pos_unit
-            recieved_torque = b4
-
-# if target_position < DXL_MINIMUM_POSITION_VALUE or target_position > DXL_MAXIMUM_POSITION_VALUE:
-#     print(f"Position must be between {DXL_MINIMUM_POSITION_VALUE} and {DXL_MAXIMUM_POSITION_VALUE}, your value {target_position}")
-#     break
 
 t_print = 0.1
 
@@ -289,35 +308,37 @@ while 1:
 
     start_system() #Initialize motor
     
-    # Get user input for spring and damper coefficients and enable/disable gravity compensation
-    K_s = input('Enter spring coefficient value in Nm/deg and press Enter (default 0.07)\n')
-    if K_s == "": # if there is no input set a default
-        K_s = "0.07"
-    print('Spring coefficient = '+K_s+"Nm/deg")    
-    K_s = float(K_s)
+    # # Get user input for spring and damper coefficients and enable/disable gravity compensation
+    # K_s = input('Enter spring coefficient value in Nm/deg and press Enter (default 0.07)\n')
+    # if K_s == "": # if there is no input set a default
+    #     K_s = "0.07"
+    # print('Spring coefficient = '+K_s+"Nm/deg")    
+    # K_s = float(K_s)
 
-    K_d = input('Enter damping coefficient value in Nm*s/deg and press Enter (default 0.006)\n')
-    if K_d == "": # if there is no input set a default
-        K_d = "0.006"
-    print('Damping coefficient = '+K_d+"Nm*s/deg")    
-    K_d = float(K_d)
+    # K_d = input('Enter damping coefficient value in Nm*s/deg and press Enter (default 0.006)\n')
+    # if K_d == "": # if there is no input set a default
+    #     K_d = "0.006"
+    # print('Damping coefficient = '+K_d+"Nm*s/deg")    
+    # K_d = float(K_d)
 
     t0 = t1 = t5 = perf_counter() # Used for results printing timing
 
+
+
     # Initialize threads 
-    position_thread = threading.Thread(target = position_read, daemon = True)
-    position_thread.start()
-    velocity_thread = threading.Thread(target = velocity_read, daemon = True)
-    velocity_thread.start()
-    Recieved_position_thread = threading.Thread(target = position_get, daemon=True)
-    Recieved_position_thread.start()
+    motor_data_thread = threading.Thread(target = motor_data, daemon = True)
+    motor_data_thread.start()
+    LSL_get_thread = threading.Thread(target = LSL_get, daemon = True)
+    LSL_get_thread.start()
 
     try:
         #enable Torque and set Bus Watchdog
         with dxl_lock:
             torque_watchdog()
-                
+
         dxl_present_velocity_main_deg = 0 #velocity for initial calculation
+        dxl_present_velocity_main_deg = 0
+        dxl_present_torque_main = 0                
         target_position = 0
 
         a = 0 # Loop counter
@@ -401,8 +422,9 @@ while 1:
 
     finally:
         stop_event.set()
-        position_thread.join()
-        velocity_thread.join()
+        LSL_get_thread.join()
+        del outlet
+        motor_data_thread.join()
         stop_event.clear()
         
         with dxl_lock:
