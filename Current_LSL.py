@@ -37,7 +37,7 @@ ADDR_PRESENT_POSITION       = 132
 ADDR_PRESENT_CURRENT        = 126
 ADDR_PRESENT_VELOCITY       = 128
 ADDR_GOAL_CURRENT           = 102
-BAUDRATE                    = 57600
+BAUDRATE                    = 2000000
 PROTOCOL_VERSION            = 2.0
 DXL_ID                      = 1
 ADDR_CURRENT_LIMIT          = 38
@@ -81,7 +81,6 @@ K_s = 0.07                   # [Nm/deg] Initial spring coefficient
 K_d = 0.006
 
 print_param = False # Set to True if printing present parameters is desired
-ard_line = 0
 
 #setup LED
 led = LED(27)
@@ -104,13 +103,12 @@ print("Receiving data...")
 
 # Stream for sending motor data
 info = StreamInfo('Stream_EXO', 'EXO', 3, 10000, 'float32', 'test_LSL')
-outlet = StreamOutlet(info)
+
 
 # Initialize Dynamixel and ports
 global portHandler, packetHandler
 portHandler = PortHandler(DEVICENAME)
 packetHandler = PacketHandler(PROTOCOL_VERSION)
-port_num = PortHandler(DEVICENAME)
 
 #Function to initalize Dynamixel Motor
 def start_system():
@@ -270,10 +268,10 @@ def motor_data():
             b2 = dxl_present_velocity.to_bytes(4, byteorder=sys.byteorder, signed = False) 
             dxl_present_velocity = int.from_bytes(b2, byteorder=sys.byteorder, signed = True)
             with velocity_lock:
-                # global dxl_present_velocity_rad
-                # dxl_present_velocity_rad = dxl_present_velocity * vel_unit * np.pi/30            #[rad/s]
                 global  dxl_present_velocity_deg
                 dxl_present_velocity_deg = float(dxl_present_velocity) * vel_unit * 6.0     # [deg/s]
+                # global dxl_present_velocity_rad
+                # dxl_present_velocity_rad = dxl_present_velocity * vel_unit * np.pi/30            #[rad/s]
             pass
 
             # Read present Current
@@ -305,7 +303,8 @@ while 1:
     print("Press any key to continue! (or press ESC to quit!)")
     if getch() ==chr(0x1b):
         break
-
+    
+    outlet = StreamOutlet(info) # Create an LSL outlet
     start_system() #Initialize motor
     
     # # Get user input for spring and damper coefficients and enable/disable gravity compensation
@@ -323,8 +322,6 @@ while 1:
 
     t0 = t1 = t5 = perf_counter() # Used for results printing timing
 
-
-
     # Initialize threads 
     motor_data_thread = threading.Thread(target = motor_data, daemon = True)
     motor_data_thread.start()
@@ -336,9 +333,7 @@ while 1:
         with dxl_lock:
             torque_watchdog()
 
-        dxl_present_velocity_main_deg = 0 #velocity for initial calculation
-        dxl_present_velocity_main_deg = 0
-        dxl_present_torque_main = 0                
+        dxl_present_velocity_main_deg = 0 #velocity for initial calculation             
         target_position = 0
 
         a = 0 # Loop counter
@@ -362,14 +357,11 @@ while 1:
             
             # Calculate goal current
             if (dxl_present_position_deg<min_pos or dxl_present_position_deg>max_pos):           # Check if position is within position limits 
-                dxl_goal_current = 0
-                dxl_goal_torque = 0
+                dxl_goal_current = dxl_goal_torque = 0
                 write_current(0)
             else:
                 dxl_goal_torque = -K_s*(dxl_present_position_main_deg-dxl_goal_position)-K_d*(dxl_present_velocity_main_deg) + T_d # [Nm] Torque should point in opposite direction as displacement
-                dxl_goal_current = 8.247191-8.247191*np.sqrt(1-0.082598*dxl_goal_torque)     # [A]
-                dxl_goal_current = dxl_goal_current * 1000                                   # [mA]
-                dxl_goal_current = round(dxl_goal_current / cur_unit)                        # [dxl units]
+                dxl_goal_current = round((8.247191-8.247191*np.sqrt(1-0.082598*dxl_goal_torque)) * 1000 / cur_unit)     # [A] * 1000 --> [mA] / cur_unit --> [dxl unit]
             
                 # Write goal current
                 if -max_current<dxl_goal_current<max_current:   # Check if goal current is within current limits
@@ -385,6 +377,7 @@ while 1:
                 dxl_present_velocity_main_deg = dxl_present_velocity_deg
         
             a += 1
+
             if print_param is True:
                 # Loop timing
                 t4 = perf_counter()-t5
@@ -414,7 +407,6 @@ while 1:
                     t3 = -(t0-perf_counter())
                     # Print results
                     print("SpringCoeff: %.4f Nm/deg  DampingCoeff: %.4f Nm*s/deg  PresPos: %.4f deg  PresVel: %.4f deg/s  GoalTorque: %.4f Nm  PresTorque: %.4f Nm Time: %.4f s Loop Time: %.4f s " % (K_s, K_d, dxl_present_position_main_deg, dxl_present_velocity_main_deg, dxl_goal_torque, dxl_present_torque, t3, t4))
-                    print(ard_line)
 
     except KeyboardInterrupt:
         print("Loop ended.")        
