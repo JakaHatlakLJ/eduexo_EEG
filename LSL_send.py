@@ -42,13 +42,13 @@ pos_unit = 360/4095         # [deg] = [dxl_unit] * [pos_unit]
 vel_unit = 0.229 * np.pi/30     # [rad/s]
 cur_unit = 2.69             # [mA]
 
-
+stream_name = "Stream_EXO"
 
 # Create a UDP socket
 #sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 # Create a new stream info
-info = StreamInfo('Stream_EXO', 'EXO', 3, 10000, 'float32', 'test_LSL')
+info = StreamInfo(stream_name, 'EXO', 3, 10000, 'float32', 'test_LSL')
 # Create an outlet
 outlet = StreamOutlet(info)
 
@@ -104,7 +104,7 @@ led.on()
 
 try:
     while True:
-        print(f'Sending motor position through stream: EEG', '\n', 'Press any key to contionue (or press ESC to quit!)')
+        print(f'Sending motor position through stream: {stream_name} \nPress any key to contionue (or press ESC to quit!)')
         if getch() ==chr(0x1b):
             break
         else:
