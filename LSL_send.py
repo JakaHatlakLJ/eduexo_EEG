@@ -70,7 +70,7 @@ if not port_handler.setBaudRate(BAUDRATE):
 
 def get_motor_position():
     """Get the current position of the Dynamixel motor"""
-    dxl_present_position, dxl_comm_result, dxl_error = packet_handler.read4ByteTxRx(port_handler, DXL_ID, ADDR_PRESENT_POSITION)
+    dxl_present_position, dxl_comm_result, _ = packet_handler.read4ByteTxRx(port_handler, DXL_ID, ADDR_PRESENT_POSITION)
     if dxl_comm_result != COMM_SUCCESS:
         print(f"Error: {packet_handler.getTxRxResult(dxl_comm_result)}")
         return None
@@ -80,7 +80,7 @@ def get_motor_position():
 
 def get_motor_current():
     """Get the current current of the Dynamixel motor"""
-    dxl_present_current, dxl_comm_result, dxl_error = packet_handler.read2ByteTxRx(port_handler, DXL_ID, ADDR_PRESENT_CURRENT)
+    dxl_present_current, dxl_comm_result, _ = packet_handler.read2ByteTxRx(port_handler, DXL_ID, ADDR_PRESENT_CURRENT)
     if dxl_comm_result != COMM_SUCCESS:
         print(f"Error: {packet_handler.getTxRxResult(dxl_comm_result)}")
         return None
@@ -90,7 +90,7 @@ def get_motor_current():
 
 def get_motor_velocity():
     """Get the current velocity of the Dynamixel motor"""
-    dxl_present_velocity, dxl_comm_result, dxl_error = packet_handler.read4ByteTxRx(port_handler, DXL_ID, ADDR_PRESENT_VELOCITY)
+    dxl_present_velocity, dxl_comm_result, _ = packet_handler.read4ByteTxRx(port_handler, DXL_ID, ADDR_PRESENT_VELOCITY)
     if dxl_comm_result != COMM_SUCCESS:
         print(f"Error: {packet_handler.getTxRxResult(dxl_comm_result)}")
         return None
