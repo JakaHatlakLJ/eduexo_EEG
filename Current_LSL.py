@@ -4,7 +4,7 @@
 
 import os
 import sys
-from time import perf_counter
+from time import perf_counter, time
 import numpy as np
 from dynamixel_sdk import * 
 from pylsl import StreamInlet, resolve_stream, StreamInfo, StreamOutlet
@@ -83,7 +83,7 @@ K_d = 0.006
 print_param = False # Set to True if printing present parameters is desired
 
 #setup LED
-led = LED(27)
+# led = LED(27)
 
 # LOCKER INITIALIZATION
 position_lock = threading.Lock()
@@ -110,6 +110,18 @@ global portHandler, packetHandler
 portHandler = PortHandler(DEVICENAME)
 packetHandler = PacketHandler(PROTOCOL_VERSION)
 
+
+# frequency loging
+frequency_path = "./frequency_data"
+os.makedirs(os.path.join(frequency_path), exist_ok=True)
+file_idx = len([filename for filename in os.listdir(os.path.join(frequency_path)) if filename.startswith("frequency_data")])
+file_idx = f'{file_idx:02d}'
+frequency_file = open(os.path.join(frequency_path, f"frequency_data_{file_idx}.txt"), "w")
+first_loop = True
+
+
+
+
 #Function to initalize Dynamixel Motor
 def start_system():
     '''Function for seting up motor:
@@ -133,33 +145,32 @@ def start_system():
         print("Failed to change the baudrate")
         sys.exit()
 
-    with dxl_lock:
-        # Set operating mode to current control
-        dxl_comm_result, dxl_error = packetHandler.write1ByteTxRx(portHandler, DXL_ID, ADDR_OP_MODE, CURRENT_CONTROL)
-        if dxl_comm_result != COMM_SUCCESS:
-            print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
-        elif dxl_error != 0:
-            print("%s" % packetHandler.getRxPacketError(dxl_error))
-        else:
-            print("Operating mode has been switched to current control.")
+    # Set operating mode to current control
+    dxl_comm_result, dxl_error = packetHandler.write1ByteTxRx(portHandler, DXL_ID, ADDR_OP_MODE, CURRENT_CONTROL)
+    if dxl_comm_result != COMM_SUCCESS:
+        print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
+    elif dxl_error != 0:
+        print("%s" % packetHandler.getRxPacketError(dxl_error))
+    else:
+        print("Operating mode has been switched to current control.")
 
-        # Set the current limit
-        dxl_comm_result, dxl_error = packetHandler.write2ByteTxRx(portHandler, DXL_ID, ADDR_CURRENT_LIMIT, max_current)
-        if dxl_comm_result != COMM_SUCCESS:
-            print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
-        elif dxl_error != 0:
-            print("%s" % packetHandler.getRxPacketError(dxl_error))
-        else:
-            print("Current limit has been set.")
+    # Set the current limit
+    dxl_comm_result, dxl_error = packetHandler.write2ByteTxRx(portHandler, DXL_ID, ADDR_CURRENT_LIMIT, max_current)
+    if dxl_comm_result != COMM_SUCCESS:
+        print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
+    elif dxl_error != 0:
+        print("%s" % packetHandler.getRxPacketError(dxl_error))
+    else:
+        print("Current limit has been set.")
 
-        # Clear Bus Watchdog
-        dxl_comm_result, dxl_error = packetHandler.write1ByteTxRx(portHandler, DXL_ID, ADDR_WATCHDOG, watchdog_clear)
-        if dxl_comm_result != COMM_SUCCESS:
-            print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
-        elif dxl_error != 0:
-            print("%s" % packetHandler.getRxPacketError(dxl_error))
-        else:
-            print(f"Watchdog is cleared.")
+    # Clear Bus Watchdog
+    dxl_comm_result, dxl_error = packetHandler.write1ByteTxRx(portHandler, DXL_ID, ADDR_WATCHDOG, watchdog_clear)
+    if dxl_comm_result != COMM_SUCCESS:
+        print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
+    elif dxl_error != 0:
+        print("%s" % packetHandler.getRxPacketError(dxl_error))
+    else:
+        print(f"Watchdog is cleared.")
 
 def torque_watchdog():
     '''Function for enabling Torque and setting Bus Watchdog'''       
@@ -171,7 +182,7 @@ def torque_watchdog():
         print("%s" % packetHandler.getRxPacketError(dxl_error))
     else:
         print("Torque is enabled.")
-        led.on() #Turn LED ON
+        # led.on() #Turn LED ON
 
     # Enable Bus Watchdog
     dxl_comm_result, dxl_error = packetHandler.write1ByteTxRx(portHandler, DXL_ID, ADDR_WATCHDOG, watchdog_time)
@@ -213,7 +224,7 @@ def stop_system():
         print("%s" % packetHandler.getRxPacketError(dxl_error))
     else:
         print("Torque is disabled.")
-        led.off()# Turn LED off
+        # led.off()# Turn LED off
 
 def write_current(goal_cur):
     '''Functiong for writing goal current to motor'''
@@ -338,6 +349,7 @@ while 1:
 
         a = 0 # Loop counter
         b = perf_counter() # Loop Timer
+        c = perf_counter()
 
         while 1:
             
@@ -377,6 +389,15 @@ while 1:
                 dxl_present_velocity_main_deg = dxl_present_velocity_deg
         
             a += 1
+            
+            if first_loop:
+                first_loop = False
+                previous_timestamp = 1
+            else:
+                freq = 1 / (c - previous_timestamp)
+
+                frequency_file.write(str(freq) + "\n")
+                previous_timestamp = c + 0.001
 
             if print_param is True:
                 # Loop timing
