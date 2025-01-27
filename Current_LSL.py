@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+#### Same as Current_LSL except that loop frrequency can be limited to desired value (intended 200Hz)
 
 import os
 import sys
@@ -54,7 +55,7 @@ DXL_MOVING_STATUS_THRESHOLD = 10
 
 #### Define control mode and BAUDRATE
 CURRENT_CONTROL             = 0                                                         # Value for switching to current control mode
-BAUDRATE                    = 1000000               # [bps]                             # set BAUDRATE: 9600/57600/115200/1M/2M/3M/4M/4.5M
+BAUDRATE                    = 1000000              # [bps]                             # set BAUDRATE: 9600/57600/115200/1M/2M/3M/4M/4.5M
 BAUDRATE_VALUE              = baud_dict[BAUDRATE]
 
 # Bus Watchdog value
@@ -91,6 +92,7 @@ print_param = False                                                             
 
 # Path for saving frequencies of each loop
 frequency_path = "./frequency_data"
+save_freq = False
 
 #setup LED
 led = LED(27)
@@ -129,15 +131,24 @@ def create_file(frequency_path):
     frequency_file = open(os.path.join(frequency_path, f"frequency_data_EXO_{file_idx}.txt"), "w")
     return frequency_file
 
-# function for setting BAUDRATE of Dynamixel
-def set_baudrate(CURRENT_BAUDRATE, NEW_BAUDRATE_VALUE, NEW_BAUDRATE):
+# Function to find current baudrate
+def find_current_baudrate():
+    print(f"Trying to find current baudrate")
+    for baudrate in baud_dict.keys():
+        if portHandler.setBaudRate(baudrate):
+            # Try to ping the motor
+            dxl_model_number, dxl_comm_result, dxl_error = packetHandler.ping(portHandler, DXL_ID)
+            if dxl_comm_result == COMM_SUCCESS:
+                print(f"Successfully connected at baudrate: {baudrate}")
+                return baudrate
+        else:
+            print(f"Failed to set baudrate: {baudrate}")
+    return None
 
-    # Set BAUDRATE to default on RasPi
-    if portHandler.setBaudRate(CURRENT_BAUDRATE):
-        print(f"Succeeded to change the baudrate to {CURRENT_BAUDRATE} on RasPi")
-    else:
-        print("Failed to change the baudrate")
-        sys.exit()
+# function for setting BAUDRATE of Dynamixel
+def set_baudrate(NEW_BAUDRATE_VALUE, NEW_BAUDRATE, CURRENT_BAUDRATE = None, start_system = True):
+    if CURRENT_BAUDRATE == None:
+        CURRENT_BAUDRATE = find_current_baudrate()
 
     # Set NEW BAUDRATE on Dynamixel
     dxl_comm_result, dxl_error = packetHandler.write1ByteTxRx(portHandler, DXL_ID, ADDR_BAUDRATE, NEW_BAUDRATE_VALUE)
@@ -146,14 +157,17 @@ def set_baudrate(CURRENT_BAUDRATE, NEW_BAUDRATE_VALUE, NEW_BAUDRATE):
     elif dxl_error != 0:
         print("%s" % packetHandler.getRxPacketError(dxl_error))
     else:
-        print(f"BAUDRATE has been switched to {NEW_BAUDRATE} on Dynamixel.")
+        print(f"Baudrate has been switched to {NEW_BAUDRATE} on Dynamixel.")
 
-    # Set BAUDRATE to NEW BAUDRATE on RasPi
-    if portHandler.setBaudRate(NEW_BAUDRATE):
-        print(f"Succeeded to change the baudrate to new {NEW_BAUDRATE} on RasPi")
-    else:
-        print("Failed to change the baudrate")
-        sys.exit()
+    if start_system:
+        # Set BAUDRATE to NEW BAUDRATE on RasPi
+        if portHandler.setBaudRate(NEW_BAUDRATE):
+            print(f"Succeeded to change the baudrate to {NEW_BAUDRATE} on RasPi")
+        else:
+            print("Failed to change the baudrate")
+            sys.exit()
+
+        return CURRENT_BAUDRATE
 
 #Function to initalize Dynamixel Motor
 def start_system():
@@ -172,7 +186,7 @@ def start_system():
         sys.exit()
 
     # Set NEW BAUDRATE
-    set_baudrate(DEFAULT_BAUDRATE, BAUDRATE_VALUE, BAUDRATE)
+    set_baudrate(BAUDRATE_VALUE, BAUDRATE)
 
     with dxl_lock:
         # Set operating mode to current control
@@ -223,7 +237,7 @@ def torque_watchdog():
     else:
         print(f"Watchdog is set to {watchdog_time*20} ms.")
         
-def stop_system():
+def stop_system(CURRENT_BAUDRATE):
     '''Function for stoping motor safely:
         - Disable Bus Watchdog
         - Set goal Current to 0
@@ -257,7 +271,7 @@ def stop_system():
         led.off()# Turn LED off
 
     # reset BAUDRATE back to default value
-    set_baudrate(BAUDRATE, 1, DEFAULT_BAUDRATE)
+    set_baudrate(1, DEFAULT_BAUDRATE, CURRENT_BAUDRATE, start_system=False)
 
 def write_current(goal_cur):
     '''Functiong for writing goal current to motor'''
@@ -349,12 +363,13 @@ while 1:
     if getch() ==chr(0x1b):
         break
     
-    frequency_file = create_file(frequency_path)
+    if save_freq:
+        frequency_file = create_file(frequency_path)
     previous_timestamp = None
     freqs = []
 
     outlet = StreamOutlet(info) # Create an LSL outlet
-    start_system() #Initialize motor
+    CURRENT_BAUDRATE = start_system() #Initialize motor
     
     # # Get user input for spring and damper coefficients and enable/disable gravity compensation
     # K_s = input('Enter spring coefficient value in Nm/deg and press Enter (default 0.07)\n')
@@ -469,9 +484,10 @@ while 1:
     except KeyboardInterrupt:
         print("Loop ended.")        
         print(f'Average loop frequency was: {round(a/(perf_counter() - b), 2)}Hz')
-        frequency_file.write("\n".join(str(f) for f in freqs) + "\n")
-        freqs = []
-        frequency_file.close()
+        if save_freq:
+            frequency_file.write("\n".join(str(f) for f in freqs) + "\n")
+            freqs = []
+            frequency_file.close()
 
     finally:
         stop_event.set()
@@ -481,7 +497,7 @@ while 1:
         stop_event.clear()
         
         with dxl_lock:
-            stop_system()
+            stop_system(CURRENT_BAUDRATE)
 
         # Reboot and Close port
         with dxl_lock:
