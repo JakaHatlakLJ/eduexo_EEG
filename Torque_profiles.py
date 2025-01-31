@@ -8,9 +8,10 @@ class TorqueProfiles:
     def __init__(self, time_interval=500, max_y=1, loop_frequency=200):
         self.time = time_interval  # [ms]
         self.max_y = max_y
-        instance = int(time_interval * loop_frequency / 1000 + 1)
-        self.x, self.step = np.linspace(0, self.time, instance, retstep=True)  # Create x with 101 elements for frequency of 200Hz
+        self.instance = int(time_interval * loop_frequency / 1000 + 1)
+        self.x, self.step = np.linspace(0, self.time, self.instance, retstep=True)  # Create x with 101 elements for frequency of 200Hz
         self.l = len(self.x)
+        self.loop_frequency = loop_frequency
 
     def trapezoid(self, width_portion=5):
         portion = width_portion
@@ -93,7 +94,7 @@ if __name__ == "__main__":
     # Create a 2x3 grid of subplots
     fig, axes = plt.subplots(2, 3, figsize=(12, 8))
 
-    # Plot the first row (3 graphs)
+    # First row
     axes[0, 0].plot(x, y_trap)
     axes[0, 0].set_title("Trapezoid Profile")
     axes[0, 0].set_xlabel("Time [ms]")
@@ -106,7 +107,7 @@ if __name__ == "__main__":
     axes[0, 2].set_title("Sinusoidal Profile")
     axes[0, 2].set_xlabel("Time [ms]")
 
-    # Plot the second row (2 graphs, centered)
+    # Second row
     axes[1, 0].plot(x, y_pulse)
     axes[1, 0].set_title("Pulse Profile")
     axes[1, 0].set_xlabel("Time [ms]")
@@ -115,14 +116,8 @@ if __name__ == "__main__":
     axes[1, 1].set_title("Smoothed Trapezoid Profile")
     axes[1, 1].set_xlabel("Time [ms]")
 
-    # Remove the empty subplot in the bottom-right corner
     fig.delaxes(axes[1, 2])
 
-    # Adjust layout
     plt.tight_layout()
-
-    # Save the figure to a file
     plt.savefig("torque_profiles.png")
-
-    # Uncomment this if you want to display the figure in a window
     # plt.show()
