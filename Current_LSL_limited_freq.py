@@ -7,7 +7,7 @@ import sys
 from time import perf_counter
 import numpy as np
 from dynamixel_sdk import * 
-from pylsl import StreamInlet, resolve_stream, StreamInfo, StreamOutlet
+from pylsl import StreamInlet, resolve_streams, StreamInfo, StreamOutlet
 from gpiozero import LED
 import threading
 
@@ -106,11 +106,11 @@ stop_event = threading.Event()                                                  
 
 #### Lab Streaming Layer setup
 # Position and Torque
-stream_xT = resolve_stream('type', 'EEG')                                               # Resolve a stream
+stream_xT = resolve_streams('type', 'EEG')                                               # Resolve a stream
 inlet1 = StreamInlet(stream_xT[0])                                                      # Create an inlet
 
 # Parameters for Impdeance control (K_s, K_d)
-# stream_P = resolve_stream('type', 'EEG_KD')                                           # Resolve a stream
+# stream_P = resolve_streams('type', 'EEG_KD')                                           # Resolve a stream
 # inlet2 = StreamInlet(stream_P[0])                                                     # Create an inlet
 print("Receiving data...")
 

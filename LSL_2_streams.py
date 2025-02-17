@@ -1,10 +1,10 @@
-from pylsl import StreamInlet, resolve_stream
+from pylsl import StreamInlet, resolve_streams
 
 sample_names = ['Position', 'Velocity', 'Current', 'Torque']
 
 # Resolve a stream
-stream1 = resolve_stream('type', 'EEG')
-stream2 = resolve_stream('type', 'EEG_KD')
+stream1 = resolve_streams('type', 'EEG')
+stream2 = resolve_streams('type', 'EEG_KD')
 
 # Create an inlet
 inlet1 = StreamInlet(stream1[0])

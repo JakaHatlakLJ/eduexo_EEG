@@ -8,7 +8,7 @@ import time
 from time import perf_counter
 import numpy as np
 from dynamixel_sdk import *  # Dynamixel SDK library
-from pylsl import StreamInlet, resolve_stream
+from pylsl import StreamInlet, resolve_streams
 from gpiozero import LED
 
 
@@ -73,7 +73,7 @@ PID_values  = [P_gain, I_gain, D_gain]
 PID_names   = ['P', 'I', 'D']
 
 #Lab Streaming Layer setup
-streams = resolve_stream('type', 'EEG')         # Resolve a stream
+streams = resolve_streams('type', 'EEG')         # Resolve a stream
 inlet = StreamInlet(streams[0])                 # Create an inlet
 print("Receiving data...")
 

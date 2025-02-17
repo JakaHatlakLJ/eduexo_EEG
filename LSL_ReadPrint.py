@@ -1,8 +1,8 @@
-from pylsl import StreamInlet, resolve_stream
+from pylsl import StreamInlet, resolve_streams
 
 try:
     # Resolve a stream
-    stream1 = resolve_stream('type', 'EEG')
+    stream1 = resolve_streams('type', 'EEG')
 
     # Create an inlet
     inlet = StreamInlet(stream1[0])
