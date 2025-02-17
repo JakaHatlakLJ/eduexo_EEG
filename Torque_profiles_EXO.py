@@ -74,7 +74,7 @@ current_limit = round(current_limit / cur_unit)                             # [d
 T_d = 0.0
 
 # Max torque profile value
-max_torque  = 1.0                                                           # [Nm]
+max_torque  = 4                                                           # [Nm]
 max_current = 8.247191-8.247191*np.sqrt(1-0.082598*max_torque)              # [A]
 max_current = max_current * 1000.0                                          # [mA]
 max_current = round(max_current / cur_unit)                                 # [dxl units]
