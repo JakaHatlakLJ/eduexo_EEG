@@ -44,7 +44,7 @@ class TorqueProfiles:
         y_sin = self.max_y / 2 * (-np.cos(2 * np.pi * self.x / self.time) + 1)
         return y_sin
 
-    def pulse(self, width_portion=8):
+    def pulse(self, width_portion=6):
         pulse_width = width_portion
         y_pulse = []
 
