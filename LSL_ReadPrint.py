@@ -1,8 +1,8 @@
-from pylsl import StreamInlet, resolve_streams
+from pylsl import StreamInlet, resolve_byprop
 
 try:
     # Resolve a stream
-    stream1 = resolve_streams('type', 'EEG')
+    stream1 = resolve_byprop('type', 'Events')
 
     # Create an inlet
     inlet = StreamInlet(stream1[0])
@@ -10,9 +10,10 @@ try:
     print("Receiving data...")
     while True:
         # Use a timeout of 1 second
-        sample, timestamp = inlet.pull_sample(timeout=1.0)
+        sample, timestamp = inlet.pull_sample()
         if sample is not None:
-            print(f"{sample} Timestamp: {timestamp}")
+            if "Event_ID" in sample[0]:
+                print(f"{sample[0]}")
 
 except KeyboardInterrupt:
     print("Stream reading interrupted by user.")
