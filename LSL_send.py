@@ -48,7 +48,7 @@ stream_name = "Stream_EXO"
 #sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 # Create a new stream info
-info = StreamInfo(stream_name, 'EXO', 3, 10000, 'float32', 'test_LSL')
+info = StreamInfo(stream_name, 'EXO', 4, 10000, 'float32', 'test_LSL')
 # Create an outlet
 outlet = StreamOutlet(info)
 
@@ -114,9 +114,10 @@ try:
             position = get_motor_position()
             velocity = get_motor_velocity()
             current = get_motor_current()
-            torque = 0.082598 * (1 - (1 - current * cur_unit / 8.247191)**2) #[mNm]
-            
-            DATA = [position * pos_unit, velocity * vel_unit, torque]
+            torque = 0.0 #0.082598 * (1 - (1 - current * cur_unit / 8.247191)**2) #[mNm]
+            execution = 0
+
+            DATA = [position * pos_unit, velocity * vel_unit, torque, execution]
             # Send motor position data via stream
             outlet.push_sample(DATA)
             #message = str(position).encode('utf-8')
