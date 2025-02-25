@@ -1,0 +1,13 @@
+{
+    "torque_limit": 8,
+    "max_torque_during_trial": 4,
+    "min_pos": 55,
+    "max_pos": 180,
+    "DXL_control_mode": 0,
+    "baudrate": 2000000,
+    "control_frequency": 200,
+    "duration_of_trials": 3.5,
+    "port_name": "/dev/ttyUSB0",
+    "frequency_path": "./frequency_data",
+    "save_data": 0
+}
