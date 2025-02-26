@@ -8,8 +8,8 @@ class TorqueProfiles:
     def __init__(self, time_interval=500, max_y=1, loop_frequency=200):
         self.time = time_interval  # [ms]
         self.max_y = max_y
-        self.instance = int(time_interval * loop_frequency / 1000 + 1)
-        self.x, self.step = np.linspace(0, self.time, self.instance, retstep=True)  # Create x with 101 elements for frequency of 200Hz
+        self.instances = int(time_interval * loop_frequency / 1000)
+        self.x, self.step = np.linspace(0, self.time, self.instances + 1, retstep=True)  # Create x with elements for frequency of 200Hz
         self.l = len(self.x)
         self.loop_frequency = loop_frequency
 
@@ -37,7 +37,7 @@ class TorqueProfiles:
             if i < math.floor(self.l / 2):
                 y_tri.append(k * self.x[i])
             else:
-                y_tri.append(-k * (self.x[i] - 500))
+                y_tri.append(-k * (self.x[i] - self.time))
         return y_tri
 
     def sinus(self):
@@ -121,3 +121,9 @@ if __name__ == "__main__":
     plt.tight_layout()
     plt.savefig("torque_profiles.png")
     # plt.show()
+    print(len(x))
+    print(len(y_pulse))
+    step = len(y_trap) / (t_prof.loop_frequency * 200/1000)
+    y_list = [y_trap[int(i * step)] for i in range(int(t_prof.loop_frequency * 200/1000))]
+    print(y_trap)
+    print(y_list)

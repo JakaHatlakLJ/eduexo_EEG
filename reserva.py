@@ -27,8 +27,6 @@ def initialize_EXO(EXO_config, setup_dict = None):
     setup_dict["control_mode"] = EXO_config["DXL_control_mode"]
     setup_dict["baudrate"] = EXO_config["baudrate"]
     setup_dict["loop_frequency"] = EXO_config["control_frequency"]
-    setup_dict["trial_time"] = EXO_config["duration_of_trials"]
-    setup_dict["tprofile_time"] = EXO_config["incorrect_execution_time_ms"]
     setup_dict["device_name"] = EXO_config["port_name"]
     setup_dict["frequency_path"] = EXO_config["frequency_path"]
     setup_dict["save_data"] = True if EXO_config["save_data"] == 1 else False
@@ -88,7 +86,7 @@ if __name__ == "__main__":
         freqs = []
 
         EXO = SetupEXO(*EXO_setup)
-        LSL = LSLResolver(setup_dict["loop_frequency"], EXO.stop_event)
+        LSL = LSLResolver(EXO.stop_event)
         CURRENT_BAUDRATE = EXO.start_system() #Initialize motor
 
         t0 = t1 = t5 = perf_counter() # Used for results printing timing
@@ -97,7 +95,7 @@ if __name__ == "__main__":
         # Initialize threads
         motor_data_thread = threading.Thread(
             target=EXO.motor_data,
-            args=(True, False, False),
+            args=(True, True, False),
             daemon=True
             )
         motor_data_thread.start()
@@ -114,16 +112,6 @@ if __name__ == "__main__":
             daemon = True
             )
         LSL_outlet_thread.start()
-
-        LSL.timestamp = 0
-        previous_timestamp = 0
-        LSL.torque_profile = 0
-        LSL.direction = 0
-        LSL.correctness = 0
-        i = 0
-        dxl_goal_current = 0
-        travel = 0
-        execution = 0
 
         try:
             #enable Torque and set Bus Watchdog
@@ -146,67 +134,59 @@ if __name__ == "__main__":
                         present_velocity_deg = EXO.present_velocity_deg    
                     with EXO.torque_lock:
                         present_torque = EXO.present_torque    
+                    
 
-                    if LSL.timestamp is not None:
-                        timestamp = LSL.timestamp
-
-                    if timestamp != previous_timestamp:
-                        i = 0
+                    if LSL.torque_profile is not None:
                         execute = True
-                        start_time = perf_counter()
                         y_list = t_profile_dict[LSL.torque_profile]
+                        i = 0
+
+                    if execute:
                         
-                    if present_position_deg < EXO.min_pos + 15 or EXO.max_pos - 15 < present_position_deg:
-                        execute = False 
-                        dxl_goal_current = 0
-                        EXO.write_current(dxl_goal_current)
-                        execution = 0
-                    else:
-                        if execute:  
-                            if current_time - start_time >= setup_dict["trial_time"]:
-                                execute = False 
-                                dxl_goal_current = 0
-                                EXO.write_current(dxl_goal_current)
-                                execution = 0
-                            else:
-                                if LSL.correctness == 1:
-                                    if LSL.direction == 20:
-                                        travel = int(round((present_position_deg - ((EXO.max_pos + EXO.min_pos)/2 - 2)) / (EXO.max_pos - (EXO.max_pos + EXO.min_pos)/2 - 15) * 100))
-                                        travel = max(0, min(travel, len(y_list) - 1))
-                                        if travel <= 0:
-                                            travel = 1
-                                        dxl_goal_current = int(round(0.75 * setup_dict["max_current"] * y_list[travel]))
-                                    else:
-                                        travel = int(round((present_position_deg - ((EXO.max_pos + EXO.min_pos)/2 + 2 )) * 100 / (EXO.min_pos + 15 - (((EXO.max_pos + EXO.min_pos)/2 + 2)))))
-                                        if travel <= 7:
-                                            travel = 7
-                                        dxl_goal_current = int(round(-1.15 * setup_dict["max_current"] * y_list[travel]))
+                        # Calculate goal current
+                        if (present_position_deg < setup_dict["min_pos"] + 5 or present_position_deg > setup_dict["max_pos"] - 5):           # Check if position is within position limits 
+                            dxl_goal_current = dxl_goal_torque = 0
+                            EXO.write_current(0)
+                            execute = False
+                            y_list = None
+                        else:
+                            if LSL.correctness == 1:                        
+                                if LSL.direction == 20:
+                                    travel = int(round((present_position_deg - (EXO.max_pos + EXO.min_pos)/2) * 100 / (EXO.max_pos - 5 - (EXO.max_pos + EXO.min_pos)/2)))
+                                    travel = max(0, min(travel, len(y_list) - 1))
+                                    if travel < 0:
+                                        travel = 0
+                                    dxl_goal_current = int(round(0.75 * setup_dict["max_current"] * y_list[travel]))
                                 else:
-                                    if timestamp != previous_timestamp:
-                                        step = len(y_list) / (setup_dict["loop_frequency"] * setup_dict["tprofile_time"]/1000)
-                                        y_list = [y_list[int(i * step)] for i in range(int(setup_dict["loop_frequency"] * setup_dict["tprofile_time"]/1000))]                                    
-                                    if i >= len(x_list):
-                                        execute = False
-                                        i = 0
-                                        continue
+                                    travel = int(round((present_position_deg - (EXO.max_pos + EXO.min_pos)/2) * 100 / (EXO.min_pos + 5 - ((EXO.max_pos + EXO.min_pos)/2))))
+                                    if travel < 0:
+                                        travel = 0
+                                    dxl_goal_current = int(round(-1.15 * setup_dict["max_current"] * y_list[travel]))
+                            else:
+                                if i >= len(x_list):
+                                    execute = False
+                                    y_list = None
+                                    i = 0
+                                    continue
+                                else:
                                     if LSL.direction == 20:
                                         dxl_goal_current = int(round(0.75 * setup_dict["max_current"] * y_list[i]))
                                     else:
                                         dxl_goal_current = int(round(-1.15 * setup_dict["max_current"] * y_list[i]))
                                     i += 1
-
+                            # Write goal current
+                            if -setup_dict["max_current"] < dxl_goal_current < setup_dict["max_current"]:       # Check if goal current is within current limits
                                 EXO.write_current(dxl_goal_current)
-                                if execution != 1:
-                                    execution = 1
-                            
+                                if previous_execute == False:
+                                    EXO.execution = 1
+                            else:
+                                print("Goal current is too high.")
+                                break
+                    previous_execute = execute
+                
                     freq = 1 / (current_time - previous_time)
                     freqs.append(freq)
-                    try:
-                        if current_time - previous_time >= 0.25:
-                            print(execute,  timestamp, i, int(present_position_deg), dxl_goal_current, round(EXO.present_torque,3), travel, freq, EXO.current_limit)
-                    except AttributeError as e:
-                        pass
-                    previous_timestamp = timestamp
+
                     previous_time = current_time
 
         except KeyboardInterrupt:

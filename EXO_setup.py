@@ -122,15 +122,11 @@ class SetupEXO:
 
         # LOCKER INTIALIZATION
         self.dxl_lock = threading.Lock()
-        self.position_lock = threading.Lock()
-        self.velocity_lock = threading.Lock()
-        self.torque_lock = threading.Lock()
         self.stop_event = threading.Event()
 
         self.present_position_deg = 0
         self.present_velocity_deg = 0
         self.present_torque = 0
-        self.execution = 0
 
     def find_current_baudrate(self):
         """Function for finding current baudrate"""
@@ -247,8 +243,6 @@ class SetupEXO:
             else:
                 print(f"Watchdog is cleared.")
 
-
-
     def torque_watchdog(self):
         '''Function for enabling Torque and setting Bus Watchdog''' 
 
@@ -347,7 +341,7 @@ class SetupEXO:
             try:
                 current_t = perf_counter()
 
-                if current_t - previous_t >= 1 / (2 * self.loop_frequency):
+                if current_t - previous_t >= 1 / (1.1 * self.loop_frequency):
                     if position:
                         # Read present Position
                         with self.dxl_lock:
@@ -358,8 +352,7 @@ class SetupEXO:
                                 print("%s" % self.packetHandler.getRxPacketError(dxl_error))
                         b1 = dxl_present_position.to_bytes(4, byteorder=sys.byteorder, signed = False) 
                         dxl_present_position = int.from_bytes(b1, byteorder=sys.byteorder, signed = True)
-                        with self.position_lock:
-                            self.present_position_deg = float(dxl_present_position*SetupEXO.pos_unit)  
+                        self.present_position_deg = float(dxl_present_position*SetupEXO.pos_unit)  
 
                     if velocity:
                         # Read present Velocity
@@ -371,8 +364,7 @@ class SetupEXO:
                                 print("%s" % self.packetHandler.getRxPacketError(dxl_error))
                         b2 = dxl_present_velocity.to_bytes(4, byteorder=sys.byteorder, signed = False) 
                         dxl_present_velocity = int.from_bytes(b2, byteorder=sys.byteorder, signed = True)
-                        with self.velocity_lock:
-                            self.present_velocity_deg = float(dxl_present_velocity) * SetupEXO.vel_unit * 6.0     # [deg/s]
+                        self.present_velocity_deg = float(dxl_present_velocity) * SetupEXO.vel_unit * 6.0     # [deg/s]
 
                     if torque:
                         # Read present Current
@@ -384,13 +376,12 @@ class SetupEXO:
                                 print("%s" % self.packetHandler.getRxPacketError(dxl_error))
                         b3 = dxl_present_current.to_bytes(2, byteorder=sys.byteorder, signed = False) 
                         dxl_present_current = int.from_bytes(b3, byteorder=sys.byteorder, signed = True)
-                        with self.torque_lock:
-                            self.present_torque = 0.082598 * (1 - (1 - dxl_present_current * SetupEXO.cur_unit / 8.247191)**2)    # [mNm]
+                        self.present_torque = 0.082598 * (1 - (1 - dxl_present_current * SetupEXO.cur_unit / 8.247191)**2)    # [mNm]
 
                     previous_t = current_t
 
             except Exception as e:
-                print(f'Error in velocity_read: {e}')
+                print(f'Error in motor_data: {e}')
                 break
 
 if __name__ == "__main__":
