@@ -80,6 +80,7 @@ if __name__ == "__main__":
     recieved_direction = None
     recieved_correctness = None
     interval = 200 # [ms]
+    time_control = False
     
 
     while 1:
@@ -143,44 +144,58 @@ if __name__ == "__main__":
                         
                     if present_position_deg < EXO.min_pos + 15 or EXO.max_pos - 15 < present_position_deg:
                         active = False 
-                        execution = False
+                        execution = 0
                         dxl_goal_current = 0
                         EXO.write_current(dxl_goal_current)
                     else:
                         if active:
-                            if current_time - start_time >= 2.5:
-                                execute = False 
+                            if current_time - start_time >= 3:
                                 dxl_goal_current = 0
+                                active = False
                                 execution = 0
                             else:                
                                 if execution != 1:
                                     execution = 1            
                                 if correctness == 1:
                                     if direction == 20:
-                                        travel = int(round((present_position_deg - ((EXO.max_pos + EXO.min_pos)/2 - 2)) / (EXO.max_pos - (EXO.max_pos + EXO.min_pos)/2 - 15) * t_prof.instances))
+                                        travel = int(round((present_position_deg - (EXO.mid_pos - 2)) / (EXO.max_pos - EXO.mid_pos - 15) * t_prof.instances))
                                         travel = max(0, min(travel, len(y_list) - 1))
                                         if travel <= 0:
                                             travel = 1
-                                        dxl_goal_current = int(round(0.75 * max_current * y_list[travel]))
+                                        dxl_goal_current = int(round(0.70 * max_current * y_list[travel]))
                                     else:
-                                        travel = int(round((present_position_deg - ((EXO.max_pos + EXO.min_pos)/2 + 2 )) / (EXO.min_pos + 15 - (((EXO.max_pos + EXO.min_pos)/2 + 2))) * t_prof.instances))
+                                        travel = int(round((present_position_deg - (EXO.mid_pos + 2 )) / (EXO.min_pos + 15 - ((EXO.mid_pos + 2))) * t_prof.instances))
                                         if travel <= 7:
                                             travel = 7
-                                        dxl_goal_current = int(round(-1.1 * max_current * y_list[travel]))
+                                        dxl_goal_current = int(round(-max_current * y_list[travel]))
                                 else:
-                                    if timestamp != previous_tstamp:
-                                        step = len(y_list) / (t_prof.loop_frequency * 200/1000)
-                                        y_list = [y_list[int(i * step)] for i in range(int(t_prof.loop_frequency * 200/1000))]
-                                    if i >= len(y_list):
-                                        active = False
-                                        execution = 0
-                                        i = 0
-                                        continue
-                                    if direction == 20:
-                                        dxl_goal_current = int(round(0.75 * max_current * y_list[i]))
+                                    if time_control:    
+                                        # if timestamp != previous_tstamp:
+                                        #     step = len(y_list) / (t_prof.loop_frequency * 200/1000)
+                                        #     y_list = [y_list[int(i * step)] for i in range(int(t_prof.loop_frequency * 200/1000))]
+                                        if i >= len(y_list):
+                                            active = False
+                                            execution = 0
+                                            i = 0
+                                            dxl_goal_current = 0
+                                        else:
+                                            if direction == 20:
+                                                dxl_goal_current = int(round(0.70 * max_current * y_list[i]))
+                                            else:
+                                                dxl_goal_current = int(round(-max_current * y_list[i]))
+                                            i += 1
                                     else:
-                                        dxl_goal_current = int(round(-1.1 * max_current * y_list[i]))
-                                    i += 1
+                                        if direction == 20:
+                                            travel = int(round((present_position_deg - (EXO.mid_pos - 2)) / (EXO.max_pos - EXO.mid_pos - 15) * t_prof.instances))
+                                            travel = max(0, min(travel, len(y_list) - 1))
+                                            if travel <= 0:
+                                                travel = 1
+                                            dxl_goal_current = int(round(0.25 * max_current * y_list[travel]))
+                                        else:
+                                            travel = int(round((present_position_deg - (EXO.mid_pos + 2 )) / (EXO.min_pos + 15 - ((EXO.mid_pos + 2))) * t_prof.instances))
+                                            if travel <= 7:
+                                                travel = 7
+                                            dxl_goal_current = int(round(-0.2 * max_current * y_list[travel]))
 
                             EXO.write_current(dxl_goal_current)
                             print(active, recieved_torque, direction, correctness, timestamp, round(present_position_deg), round(present_velocity_deg, 3), round(present_torque,3), travel, perf_counter(), len(y_list))
