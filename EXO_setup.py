@@ -113,8 +113,9 @@ class SetupEXO:
         self.current_limit = round(current_limit / SetupEXO.cur_unit)               # [dxl units]
 
         # Position offset and limits values
-        self.min_pos = min_pos                  # [deg] Torque/current is set to 0 if limit is exceeded
-        self.max_pos = max_pos                  # [deg] Torque/current is set to 0 if limit is exceeded
+        self.min_pos = min_pos                          # [deg] Torque/current is set to 0 if limit is exceeded
+        self.max_pos = max_pos                          # [deg] Torque/current is set to 0 if limit is exceeded
+        self.mid_pos = (self.max_pos + self.min_pos)/2  # [deg] Midpoint, where trials start
 
         # Initialize Dynamixel and ports
         self.portHandler = PortHandler(DEVICENAME)

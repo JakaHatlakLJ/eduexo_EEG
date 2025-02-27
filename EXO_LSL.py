@@ -23,12 +23,14 @@ class LSLResolver:
 
 
         if receive:
-            # Resolve LSL stream for receiving EXO data and create an inlet
-            streams = resolve_byprop('type', 'Instructions', timeout= 5)
-            if not streams:
-                raise RuntimeError(f"No LSL stream found of type: 'Instructions'")
-            self.inlet = StreamInlet(streams[0])
-            print("Receiving instructions from PC...")
+            print(f"looking for LSL stream of type: 'Instructions'...")
+            while True:
+                # Resolve LSL stream for receiving EXO data and create an inlet
+                streams = resolve_byprop('type', 'Instructions', timeout= 10)
+                if not streams:
+                    raise RuntimeError(f"No LSL stream found of type: 'Instructions'. Retrying...")
+                self.inlet = StreamInlet(streams[0])
+                print("Receiving instructions from PC...")
 
         self.stop_event = stop_event
         self.torque_profile = None
