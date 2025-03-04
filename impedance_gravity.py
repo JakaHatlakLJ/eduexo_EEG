@@ -62,7 +62,6 @@ import threading
 from dynamixel_sdk import * 
 
 # DFRobot_LIS library to read LIS331HH Triple Axis Accelerometer data
-sys.path.append('/home/eduexo/Desktop/DFRobot_LIS/python/raspberrypi') # set system path to top
 from DFRobot_LIS import *
 
 # RPi GPIO Settings
