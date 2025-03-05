@@ -8,9 +8,9 @@ from time import perf_counter
 import numpy as np
 from dynamixel_sdk import * 
 from gpiozero import LED
-from Torque_profiles import TorqueProfiles
+from main.Torque_profiles import TorqueProfiles
 import threading
-from EXO_setup import SetupEXO
+from main.EXO_setup import SetupEXO
 
 
 if os.name == 'nt':

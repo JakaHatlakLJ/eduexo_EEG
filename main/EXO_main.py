@@ -41,9 +41,9 @@ def initialize_EXO(EXO_config, setup_dict=None):
     setup_dict["max_current"] = round(max_current / cur_unit)  # [dxl units]
 
     # Initialize torque profiles
-    profiles_position = TorqueProfiles(loop_frequency=setup_dict["loop_frequency"])
+    profiles_position = TorqueProfiles(loop_frequency=setup_dict["loop_frequency"], pulse_portion=1)
     profiles_position_dict = {0: profiles_position.y_trap, 1: profiles_position.y_tri, 2: profiles_position.y_sin, 3: profiles_position.y_pulse, 4: profiles_position.y_smtrap}
-    profiles_time = TorqueProfiles(loop_frequency=setup_dict["loop_frequency"], time_interval=setup_dict["tprofile_time"])
+    profiles_time = TorqueProfiles(loop_frequency=setup_dict["loop_frequency"], time_interval=setup_dict["tprofile_time"], pulse_portion=1)
     profiles_time_dict = {0: profiles_time.y_trap, 1: profiles_time.y_tri, 2: profiles_time.y_sin, 3: profiles_time.y_pulse, 4: profiles_time.y_smtrap}
 
     # Create EXO setup list

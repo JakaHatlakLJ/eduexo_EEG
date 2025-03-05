@@ -130,5 +130,5 @@ if __name__ == "__main__":
     fig.delaxes(axes[1, 2])
 
     plt.tight_layout()
-    plt.savefig("main/torque_profiles.png")
+    plt.savefig("./torque_profiles.png")
     # plt.show()

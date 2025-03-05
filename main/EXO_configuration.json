@@ -11,5 +11,5 @@
     "incorrect_execution_time_ms": 500,
     "port_name": "/dev/ttyUSB0",
     "frequency_path": "./frequency_data",
-    "save_data": 0
+    "save_data": 1
 }
