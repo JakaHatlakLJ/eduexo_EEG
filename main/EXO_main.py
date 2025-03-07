@@ -91,7 +91,6 @@ if __name__ == "__main__":
         # Initialize threads
         motor_data_thread = threading.Thread(
             target=EXO.motor_data,
-            args=(True, False, True, True),
             daemon=True
         )
         motor_data_thread.start()
@@ -110,12 +109,10 @@ if __name__ == "__main__":
         i = 0
         dxl_goal_current = 0
         travel = 0
-        execution = 0
 
         try:
             # Enable Torque and set Bus Watchdog
-            with EXO.dxl_lock:
-                EXO.torque_watchdog()
+            EXO.torque_watchdog()
 
             previous_time = perf_counter()  # Loop Timer
             previous_execute = False
@@ -145,18 +142,18 @@ if __name__ == "__main__":
                         
                     if present_position_deg < EXO.min_pos + 15 or EXO.max_pos - 15 < present_position_deg:
                         execute = False 
-                        execution = 0
+                        EXO.execution = 0
                         dxl_goal_current = 0
                         EXO.write_current(dxl_goal_current)
                     else:
                         if execute:  
                             if current_time - start_time >= setup_dict["trial_time"]:
                                 execute = False 
-                                execution = 0
+                                EXO.execution = 0
                                 dxl_goal_current = 0
                             else:
-                                if execution != 1:
-                                    execution = 1                                         
+                                if EXO.execution != 1:
+                                    EXO.execution = 1                                         
                                 if correctness == 1:
                                     if direction == 20:
                                         travel = int(round((present_position_deg - (EXO.mid_pos - 2)) / (EXO.max_pos - EXO.mid_pos - 15) * profiles_position.instances))

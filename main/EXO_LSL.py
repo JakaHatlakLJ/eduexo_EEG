@@ -39,7 +39,7 @@ class LSLResolver:
                 streams = resolve_byprop('type', 'Instructions', timeout=10)
                 if streams:
                     break
-                raise RuntimeError(f"No LSL stream found of type: 'Instructions'. Retrying...")
+                print(f"No LSL stream found of type: 'Instructions'. Retrying...")
             self.inlet = StreamInlet(streams[0])
             print("Receiving instructions from PC...")
 
