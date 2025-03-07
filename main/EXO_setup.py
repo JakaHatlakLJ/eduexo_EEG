@@ -24,7 +24,11 @@ else:
 
 class SetupEXO:
     """
-    Class for initializing and setting up the communication of Dynamixel-XM540-W270-T/R motor with RasPi, manual available at: https://emanual.robotis.com/docs/en/dxl/x/xm540-w270/.
+    Class for initializing and setting up the communication of Dynamixel-XM540-W270-T/R motor with RasPi, manual available at: https://emanual.robotis.com/docs/en/dxl/x/xm540-w270/.\n
+    - Initialize the class and set all the parameters for your use.
+    - Use SetupEXO.start_system(), to setup communication with motor and set the necessary parameters on it
+    - Use SetupEXO.torque_watchdog(), to enable torque on the motor and start Bus Watchdog
+    - Use SetupEXO.stop_system(), to disable torque on motor and gracefuly stop communication with motor
     """
 
     # BAUDRATE dictionary
@@ -94,6 +98,7 @@ class SetupEXO:
         # Bus Watchdog value
         self.watchdog_time = 5  # [1 unit = 20 ms]
         self.watchdog_clear = 0
+        self.torque_watchdog_enabled = False
 
         # Current limit
         self.torque_limit = torque_limit
@@ -119,7 +124,6 @@ class SetupEXO:
         self.present_torque = 0
         self.execution = 0
         
-
     def find_current_baudrate(self):
         """Function for finding current baudrate"""
 
@@ -237,25 +241,26 @@ class SetupEXO:
 
     def torque_watchdog(self):
         '''Function for enabling Torque and setting Bus Watchdog''' 
+        self.torque_watchdog_enabled = True
+        with self.dxl_lock:
+            # Enable Dynamixel Torque
+            dxl_comm_result, dxl_error = self.packetHandler.write1ByteTxRx(self.portHandler, SetupEXO.DXL_ID, SetupEXO.ADDR_TORQUE_ENABLE, SetupEXO.TORQUE_ENABLE)
+            if dxl_comm_result != COMM_SUCCESS:
+                print("%s" % self.packetHandler.getTxRxResult(dxl_comm_result))
+            elif dxl_error != 0:
+                print("%s" % self.packetHandler.getRxPacketError(dxl_error))
+            else:
+                print("Torque is enabled.")
+                SetupEXO.led.on() # Turn LED ON
 
-        # Enable Dynamixel Torque
-        dxl_comm_result, dxl_error = self.packetHandler.write1ByteTxRx(self.portHandler, SetupEXO.DXL_ID, SetupEXO.ADDR_TORQUE_ENABLE, SetupEXO.TORQUE_ENABLE)
-        if dxl_comm_result != COMM_SUCCESS:
-            print("%s" % self.packetHandler.getTxRxResult(dxl_comm_result))
-        elif dxl_error != 0:
-            print("%s" % self.packetHandler.getRxPacketError(dxl_error))
-        else:
-            print("Torque is enabled.")
-            SetupEXO.led.on() # Turn LED ON
-
-        # Enable Bus Watchdog
-        dxl_comm_result, dxl_error = self.packetHandler.write1ByteTxRx(self.portHandler, SetupEXO.DXL_ID, SetupEXO.ADDR_WATCHDOG, self.watchdog_time)
-        if dxl_comm_result != COMM_SUCCESS:
-            print("%s" % self.packetHandler.getTxRxResult(dxl_comm_result))
-        elif dxl_error != 0:
-            print("%s" % self.packetHandler.getRxPacketError(dxl_error))
-        else:
-            print(f"Watchdog is set to {self.watchdog_time * 20} ms.")
+            # Enable Bus Watchdog
+            dxl_comm_result, dxl_error = self.packetHandler.write1ByteTxRx(self.portHandler, SetupEXO.DXL_ID, SetupEXO.ADDR_WATCHDOG, self.watchdog_time)
+            if dxl_comm_result != COMM_SUCCESS:
+                print("%s" % self.packetHandler.getTxRxResult(dxl_comm_result))
+            elif dxl_error != 0:
+                print("%s" % self.packetHandler.getRxPacketError(dxl_error))
+            else:
+                print(f"Watchdog is set to {self.watchdog_time * 20} ms.")
             
     def stop_system(self):
         '''Function for stopping motor safely:
@@ -263,38 +268,42 @@ class SetupEXO:
             - Set goal Current to 0
             - Disable torque'''    
         
-        # Clear Bus Watchdog
-        dxl_comm_result, dxl_error = self.packetHandler.write1ByteTxRx(self.portHandler, SetupEXO.DXL_ID, SetupEXO.ADDR_WATCHDOG, self.watchdog_clear)
-        if dxl_comm_result != COMM_SUCCESS:
-            print("%s" % self.packetHandler.getTxRxResult(dxl_comm_result))
-        elif dxl_error != 0:
-            print("%s" % self.packetHandler.getRxPacketError(dxl_error))
-        else:
-            print(f"Watchdog is disabled.")
+        with self.dxl_lock:
+            if self.torque_watchdog_enabled:
+                self.torque_watchdog_enabled = False
+                # Clear Bus Watchdog
+                dxl_comm_result, dxl_error = self.packetHandler.write1ByteTxRx(self.portHandler, SetupEXO.DXL_ID, SetupEXO.ADDR_WATCHDOG, self.watchdog_clear)
+                if dxl_comm_result != COMM_SUCCESS:
+                    print("%s" % self.packetHandler.getTxRxResult(dxl_comm_result))
+                elif dxl_error != 0:
+                    print("%s" % self.packetHandler.getRxPacketError(dxl_error))
+                else:
+                    print(f"Watchdog is disabled.")
 
-        # Set goal current to 0
-        dxl_comm_result, dxl_error = self.packetHandler.write2ByteTxRx(self.portHandler, SetupEXO.DXL_ID, SetupEXO.ADDR_GOAL_CURRENT, 0)
-        if dxl_comm_result != COMM_SUCCESS:
-            print("%s" % self.packetHandler.getTxRxResult(dxl_comm_result))
-        elif dxl_error != 0:
-            print("%s" % self.packetHandler.getRxPacketError(dxl_error))
-        else:
-            print("Goal current is set to 0.")
+                # Set goal current to 0
+                dxl_comm_result, dxl_error = self.packetHandler.write2ByteTxRx(self.portHandler, SetupEXO.DXL_ID, SetupEXO.ADDR_GOAL_CURRENT, 0)
+                if dxl_comm_result != COMM_SUCCESS:
+                    print("%s" % self.packetHandler.getTxRxResult(dxl_comm_result))
+                elif dxl_error != 0:
+                    print("%s" % self.packetHandler.getRxPacketError(dxl_error))
+                else:
+                    print("Goal current is set to 0.")
 
-        # Disable Dynamixel Torque
-        dxl_comm_result, dxl_error = self.packetHandler.write1ByteTxRx(self.portHandler, SetupEXO.DXL_ID, SetupEXO.ADDR_TORQUE_ENABLE, SetupEXO.TORQUE_DISABLE)
-        if dxl_comm_result != COMM_SUCCESS:
-            print("%s" % self.packetHandler.getTxRxResult(dxl_comm_result))
-        elif dxl_error != 0:
-            print("%s" % self.packetHandler.getRxPacketError(dxl_error))
-        else:
-            print("Torque is disabled.")
-            SetupEXO.led.off() # Turn LED off
+                # Disable Dynamixel Torque
+                dxl_comm_result, dxl_error = self.packetHandler.write1ByteTxRx(self.portHandler, SetupEXO.DXL_ID, SetupEXO.ADDR_TORQUE_ENABLE, SetupEXO.TORQUE_DISABLE)
+                if dxl_comm_result != COMM_SUCCESS:
+                    print("%s" % self.packetHandler.getTxRxResult(dxl_comm_result))
+                elif dxl_error != 0:
+                    print("%s" % self.packetHandler.getRxPacketError(dxl_error))
+                else:
+                    print("Torque is disabled.")
+                    SetupEXO.led.off() # Turn LED off
 
-        # Reset BAUDRATE back to default value
-        self.set_baudrate(57600, self.CURRENT_BAUDRATE, stop_system=True)
+            # Reset BAUDRATE back to default value
+            self.set_baudrate(57600, self.CURRENT_BAUDRATE, stop_system=True)
 
-        self.portHandler.closePort()
+            self.portHandler.closePort()
+            print("Port has been closed")
 
     def write_current(self, goal_cur):
         '''Function for writing goal current to motor'''
@@ -321,72 +330,91 @@ class SetupEXO:
                 elif dxl_error != 0:
                     print("%s" % self.packetHandler.getRxPacketError(dxl_error))
 
-    def motor_data(self, position=False, velocity=False, torque=False, manual_velocity=False):
-        '''Function for reading current Position, Velocity and Torque of motor'''
+    def motor_data(self, position=True, velocity=False, torque=True, manual_velocity=True, limit_frequency=True):
+        '''Function for reading current Position, Velocity and Torque of motor continuously in a thread\n
+        note that velocity reading is very slow (for some reason), that is why the default velocity reading is derived from two sequential position readings'''
 
         if not position and not velocity and not torque:
             print(f"ERROR in motor_data: All parameters reading are set to False! No data is being read")
             os._exit(1)
+
+        if limit_frequency:
+            loop_frequency = self.loop_frequency
+            sleep_interval = 1 / (1.1 * loop_frequency)
+        else:
+            sleep_interval = 0
 
         self.present_position_deg = 0
         self.present_velocity_deg = 0
         self.present_torque = 0
         present_position_prev = 0
 
-        previous_t = perf_counter()
+        previous_time = perf_counter()
         while not self.stop_event.is_set():
             try:
-                current_t = perf_counter()
-
-                if current_t - previous_t >= 1 / (1.1 * self.loop_frequency):
+                current_time = perf_counter()
+                if current_time - previous_time >= sleep_interval:
                     if position:
-                        # Read present Position
-                        with self.dxl_lock:
-                            dxl_present_position, dxl_comm_result, dxl_error = self.packetHandler.read4ByteTxRx(self.portHandler, SetupEXO.DXL_ID, SetupEXO.ADDR_PRESENT_POSITION)
-                            if dxl_comm_result != COMM_SUCCESS:
-                                print("%s" % self.packetHandler.getTxRxResult(dxl_comm_result))
-                            elif dxl_error != 0:
-                                print("%s" % self.packetHandler.getRxPacketError(dxl_error))
-                        b1 = dxl_present_position.to_bytes(4, byteorder=sys.byteorder, signed = False) 
-                        dxl_present_position = int.from_bytes(b1, byteorder=sys.byteorder, signed = True)
-                        self.present_position_deg = float(dxl_present_position * SetupEXO.pos_unit)  
-
+                        self._read_position()
                     if velocity:
-                        # Read present Velocity
-                        with self.dxl_lock:
-                            dxl_present_velocity, dxl_comm_result, dxl_error = self.packetHandler.read4ByteTxRx(self.portHandler, SetupEXO.DXL_ID, SetupEXO.ADDR_PRESENT_VELOCITY)
-                            if dxl_comm_result != COMM_SUCCESS:
-                                print("%s" % self.packetHandler.getTxRxResult(dxl_comm_result))
-                            elif dxl_error != 0:
-                                print("%s" % self.packetHandler.getRxPacketError(dxl_error))
-                        b2 = dxl_present_velocity.to_bytes(4, byteorder=sys.byteorder, signed = False) 
-                        dxl_present_velocity = int.from_bytes(b2, byteorder=sys.byteorder, signed = True)
-                        self.present_velocity_deg = float(dxl_present_velocity) * SetupEXO.vel_unit * 6.0  # [deg/s]
-
+                        self._read_velocity()
                     if torque:
-                        # Read present Current
-                        with self.dxl_lock:
-                            dxl_present_current, dxl_comm_result, dxl_error = self.packetHandler.read2ByteTxRx(self.portHandler, SetupEXO.DXL_ID, SetupEXO.ADDR_PRESENT_CURRENT)
-                            if dxl_comm_result != COMM_SUCCESS:
-                                print("%s" % self.packetHandler.getTxRxResult(dxl_comm_result))
-                            elif dxl_error != 0:
-                                print("%s" % self.packetHandler.getRxPacketError(dxl_error))
-                        b3 = dxl_present_current.to_bytes(2, byteorder=sys.byteorder, signed = False) 
-                        dxl_present_current = int.from_bytes(b3, byteorder=sys.byteorder, signed = True)
-                        self.present_torque = 0.082598 * (1 - (1 - dxl_present_current * SetupEXO.cur_unit / 8.247191)**2)  # [mNm]
+                        self._read_torque()
 
                     if position and not velocity and manual_velocity:
                         if self.present_position_deg != present_position_prev:
-                            self.present_velocity_deg = (self.present_position_deg - present_position_prev) / (current_t - previous_t)
+                            self.present_velocity_deg = (self.present_position_deg - present_position_prev) / (current_time - previous_time)
                             present_position_prev = self.present_position_deg
                         else:
                             self.present_velocity_deg = 0
 
-                    previous_t = current_t
+                    previous_time = current_time
 
             except Exception as e:
                 print(f'Error in motor_data: {e}')
+                self.stop_event.set()
                 os._exit(1)
+
+    def _read_position(self):
+        # Read present Position
+        with self.dxl_lock:
+            dxl_present_position, dxl_comm_result, dxl_error = self.packetHandler.read4ByteTxRx(self.portHandler, SetupEXO.DXL_ID, SetupEXO.ADDR_PRESENT_POSITION)
+            if dxl_comm_result != COMM_SUCCESS:
+                print("%s" % self.packetHandler.getTxRxResult(dxl_comm_result))
+            elif dxl_error != 0:
+                print("%s" % self.packetHandler.getRxPacketError(dxl_error))
+        b1 = dxl_present_position.to_bytes(4, byteorder=sys.byteorder, signed=False) 
+        dxl_present_position = int.from_bytes(b1, byteorder=sys.byteorder, signed=True)
+        self.present_position_deg = float(dxl_present_position * SetupEXO.pos_unit)  
+        return self.present_position_deg
+
+    def _read_velocity(self):
+        # Read present Velocity
+        with self.dxl_lock:
+            dxl_present_velocity, dxl_comm_result, dxl_error = self.packetHandler.read4ByteTxRx(self.portHandler, SetupEXO.DXL_ID, SetupEXO.ADDR_PRESENT_VELOCITY)
+            if dxl_comm_result != COMM_SUCCESS:
+                print("%s" % self.packetHandler.getTxRxResult(dxl_comm_result))
+            elif dxl_error != 0:
+                print("%s" % self.packetHandler.getRxPacketError(dxl_error))
+        b2 = dxl_present_velocity.to_bytes(4, byteorder=sys.byteorder, signed=False) 
+        dxl_present_velocity = int.from_bytes(b2, byteorder=sys.byteorder, signed=True)
+        self.present_velocity_deg = float(dxl_present_velocity) * SetupEXO.vel_unit * 6.0  # [deg/s]
+        return self.present_velocity_deg
+
+
+    def _read_torque(self):
+        # Read present Torque
+        with self.dxl_lock:
+            dxl_present_current, dxl_comm_result, dxl_error = self.packetHandler.read2ByteTxRx(self.portHandler, SetupEXO.DXL_ID, SetupEXO.ADDR_PRESENT_CURRENT)
+            if dxl_comm_result != COMM_SUCCESS:
+                print("%s" % self.packetHandler.getTxRxResult(dxl_comm_result))
+            elif dxl_error != 0:
+                print("%s" % self.packetHandler.getRxPacketError(dxl_error))
+        b3 = dxl_present_current.to_bytes(2, byteorder=sys.byteorder, signed=False) 
+        dxl_present_current = int.from_bytes(b3, byteorder=sys.byteorder, signed=True)
+        self.present_torque = 0.082598 * (1 - (1 - dxl_present_current * SetupEXO.cur_unit / 8.247191)**2)  # [mNm]
+        return self.present_torque
+
 
 if __name__ == "__main__":
     print(f'resetting EXO')
