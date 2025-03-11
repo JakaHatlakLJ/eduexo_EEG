@@ -99,7 +99,7 @@ This will start the experiment based on the configurations prepared in the previ
     "max_torque_during_trial": 4                "Maximum torque allowed during a trial",
     "min_pos": 55                               "Minimum position limit for the motor",
     "max_pos": 165                              "Maximum position limit for the motor",
-    "DXL_control_mode": 0                       "Control mode for the Dynamixel motor (0 for position control)",
+    "DXL_control_mode": 0                       "Control mode for the Dynamixel motor (0 for current control)",
     "baudrate": 1000000                         "Communication baud rate for the motor",
     "control_frequency": 200                    "Frequency at which control commands are sent",
     "duration_of_trials": 3.5                   "Duration of each trial in seconds",
