@@ -101,10 +101,10 @@ This will start the experiment based on the configurations prepared in the previ
     "max_pos": 165                              "Maximum position limit for the motor",
     "DXL_control_mode": 0                       "Control mode for the Dynamixel motor (0 for current control)",
     "baudrate": 1000000                         "Communication baud rate for the motor",
-    "control_frequency": 200                    "Frequency at which control commands are sent",
+    "control_frequency": 200                    "Frequency at which the program operates for better consistency",
     "duration_of_trials": 3.5                   "Duration of each trial in seconds",
-    "incorect_execution_positon_control": 0     "Flag for incorrect execution in position control",
-    "incorrect_execution_time_ms": 500          "Time in milliseconds for incorrect execution handling",
+    "incorect_execution_positon_control": 0     "Flag for incorrect execution mode (0 time controled, 1 position controled)",
+    "incorrect_execution_time_ms": 500          "Time duration in milliseconds for time controled incorrect execution",
     "port_name":                                "/dev/ttyUSB0"  "Port name for the motor connection",
     "frequency_path":                           "./frequency_data"  "Path to save frequency data",
     "save_data": 1                              "Flag to save data (1 to save, 0 not to save)"
