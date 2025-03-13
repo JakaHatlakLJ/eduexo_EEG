@@ -12,6 +12,17 @@ This project is designed to control a Dynamixel motor using EEG signals via the 
 - Another PC is required to run the main experiment and for LSL communication:
     - Refer to: [https://github.com/JakaHatlakLJ/eduexo_PC]
 
+## SSH Connection
+
+To easily access scripts on EXO, connect to it through SSH:
+
+1. Make sure you are connected to the NBR experimental WIFI network
+2. Open Visual Studio Code (or terminal)
+3. Connect to EXO via SSH:
+    - username: eduexo@192.168.1.46
+    - password: exo123
+4. Navigate to ~/eduexo_EEG 
+
 ## Installation
 
 Before running the experiment, ensure you have the following prerequisites:
