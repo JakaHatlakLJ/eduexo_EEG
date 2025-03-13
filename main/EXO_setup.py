@@ -68,23 +68,23 @@ class SetupEXO:
 
     def __init__(
             self,
-            torque_limit = 8,
-            min_pos = 55,
-            max_pos = 180,
-            CONTROL_MODE = 0,
-            BAUDRATE = 1000000,
-            loop_frequency = 200,
-            DEVICENAME = '/dev/ttyUSB0'
+            torque_limit: int = 8,
+            min_pos: int = 55,
+            max_pos: int = 180,
+            CONTROL_MODE: int = 0,
+            BAUDRATE: int = 1000000,
+            loop_frequency: int = 200,
+            DEVICENAME: str = '/dev/ttyUSB0'
             ):
         """
         Initialize the SetupEXO class.\n Parameters:\n
-        - torque_limit (int): Maximum torque allowed on motor [Nm].\n
-        - min_pos (int): Torque is set to 0 before this motor position [deg].\n
-        - max_pos (int): Torque is set to 0 after this motor position [deg].\n
-        - CONTROL_MODE (int): Operating mode of Dynamixel motor.\n
-        - BAUDRATE (int): Communication baud rate.\n
-        - loop_frequency (int): Limit of control frequency for improved consistency.\n
-        - DEVICENAME (str): Device name on RasPi.
+        :param torque_limit: Maximum torque allowed on motor [Nm].\n
+        :param min_pos: Torque is set to 0 before this motor position [deg].\n
+        :param max_pos: Torque is set to 0 after this motor position [deg].\n
+        :param CONTROL_MODE: Operating mode of Dynamixel motor.\n
+        :param BAUDRATE: Communication baud rate.\n
+        :param loop_frequency: Limit of control frequency for improved consistency.\n
+        :param DEVICENAME: Device name on RasPi.
         """
 
         # Define control mode and BAUDRATE
@@ -94,10 +94,11 @@ class SetupEXO:
         self.loop_frequency = loop_frequency
 
         # Bus Watchdog value
-        self.watchdog_time = 5  # [1 unit = 20 ms]
+        self.watchdog_time = 10  # [1 unit = 20 ms]
         self.watchdog_clear = 0
         self.torque_enabled = False
         self.watchdog_set = False
+        self.first_use = True
 
         # Current limit
         self.torque_limit = torque_limit
@@ -139,7 +140,11 @@ class SetupEXO:
         return None
 
     def set_baudrate(self, NEW_BAUDRATE, CURRENT_BAUDRATE = None, stop_system = False):
-        """Function for setting BAUDRATE of Dynamixel"""
+        """Function for setting BAUDRATE of Dynamixel
+        :param NEW_BAUDRATE (int): desired baudrate, default is 1Mbps
+        :param CURRENT_BAUDRATE (int): if known speeds up process, else it finds it
+        :param stop_system (bool): if True uses instance.CURRENT_BAUDRATE and resets it to 57600
+        """
 
         NEW_BAUDRATE_VALUE = SetupEXO.baud_dict[NEW_BAUDRATE]
 
@@ -222,10 +227,12 @@ class SetupEXO:
         self._set_torque_limit(self.torque_limit)
         self._clear_bus_watchdog()
 
-    def torque_watchdog(self):
-        '''Function for enabling Torque and setting Bus Watchdog''' 
+    def torque_watchdog(self, watchdog_time = None):
+        '''Function for enabling Torque and setting Bus Watchdog\n
+        :param watchdog_time: set watchdog time, default is 100ms\n
+        use _enable_disable_torque() if communication with motor is not periodical and Bus Watchdog is not needed''' 
         self._enable_disable_torque()
-        self._set_bus_watchdog()
+        self._set_bus_watchdog(watchdog_time)
            
     def stop_system(self):
         '''Function for stopping motor safely:
@@ -249,8 +256,10 @@ class SetupEXO:
             self.portHandler.closePort()
             print("Port has been closed")
 
-    def write_current(self, goal_cur):
-        '''Function for writing goal current to motor in DXL units'''
+    def write_current(self, goal_cur: int):
+        '''Function for writing goal current to motor in DXL units
+        :param goal_cur: goal current in DXL units, use SetupEXO.cur_unit to translate
+        '''
         if self.CONTROL_MODE not in (0,5):
             raise Exception(f"Can only write goal current in Current Control or Current-based Position Control Mode")        
         else:
@@ -263,8 +272,10 @@ class SetupEXO:
                 else:
                     return True
 
-    def write_position(self, goal_pos, print_result=False):
-        '''Function for writing goal position to motor in DXL units'''
+    def write_position(self, goal_pos: int, print_result=False):
+        '''Function for writing goal position to motor in DXL units
+        :param goal_pos: goal position in DXL units, use SetupEXO.cur_unit to translate
+        '''
 
         if self.CONTROL_MODE not in (3,5):
             raise Exception(f"Can only write desired position in Position Control or Current-based Position Control Mode")        
@@ -279,50 +290,77 @@ class SetupEXO:
                     if print_result:
                         print(f"Motor is moving to position {round(goal_pos * SetupEXO.pos_unit, 2)} deg")
 
-    def motor_data(self, position=True, velocity=False, torque=True, manual_velocity=True, limit_frequency=True):
-        '''Function for reading current Position, Velocity and Torque of motor continuously in a thread\n
-        note that velocity reading is very slow (for some reason), that is why the default velocity reading is derived from two sequential position readings'''
+    def motor_data(self, position: bool=True, velocity: bool=False, torque: bool=True, manual_velocity: bool=True, limit_frequency: bool=True, one_time: bool=False):
+        '''Function for reading current Position, Velocity and Torque of motor continuously in a thread or just one time\n
+        Note that velocity reading is very slow (for some reason), that is why the default velocity reading is derived from two sequential position readings\n
+        :param position: Read present position from Dynamixel API
+        :param velocity: Read present velocity from Dynamixel API
+        :param torque: Read present torque (current) from Dynamixel API
+        :param manual_velocity: Derive present velocity from sequential position readings
+        :param limit_frequency: limit readings to class instance loop_frequency for better consistency
+        :param one_time: True for one time reading, False for in thread use:\n
+            - if in thread, parameters are stored in a class instance (SetupEXO.present_position_deg/present_velocity_deg/present_torque)
+            - if one time, paramteres are also returned -> position, velocity, torque
+
+        '''
 
         if not position and not velocity and not torque:
             print(f"ERROR in motor_data: All parameter readings are set to False! No data will be read.")
             os._exit(1)
 
-        if limit_frequency:
-            loop_frequency = self.loop_frequency
-            sleep_interval = 1 / (1.1 * loop_frequency)
+        if one_time:
+            present_position = None
+            present_velocity = None
+            present_torque = None
+            if manual_velocity:
+                if self.first_use:    
+                    print(f"ERROR in motor_data: Can not derive velocity from one time reading, using API velocity instead")
+                    velocity = True
+                    self.first_use = False
+            if position:
+                present_position = self._read_position()
+            if velocity:
+                present_velocity = self._read_velocity()
+            if torque:
+                present_torque = self._read_torque()
+            return present_position, present_velocity, present_torque            
+
         else:
-            sleep_interval = 0
+            if limit_frequency:
+                loop_frequency = self.loop_frequency
+                sleep_interval = 1 / loop_frequency
+            else:
+                sleep_interval = 0
 
-        self.present_position_deg = 0
-        self.present_velocity_deg = 0
-        self.present_torque = 0
-        present_position_prev = 0
+            self.present_position_deg = 0
+            self.present_velocity_deg = 0
+            self.present_torque = 0
+            present_position_prev = 0
 
-        previous_time = perf_counter()
-        while not self.stop_event.is_set():
-            try:
-                current_time = perf_counter()
-                if current_time - previous_time >= sleep_interval:
-                    if position:
-                        self._read_position()
-                    if velocity:
-                        self._read_velocity()
-                    if torque:
-                        self._read_torque()
+            previous_time = perf_counter()
+            while not self.stop_event.is_set():
+                try:
+                    current_time = perf_counter()
+                    if current_time - previous_time >= sleep_interval:
+                        if position:
+                            self._read_position()
+                        if velocity:
+                            self._read_velocity()
+                        if torque:
+                            self._read_torque()
 
-                    if position and not velocity and manual_velocity:
-                        if self.present_position_deg != present_position_prev:
-                            self.present_velocity_deg = (self.present_position_deg - present_position_prev) / (current_time - previous_time)
-                            present_position_prev = self.present_position_deg
-                        else:
-                            self.present_velocity_deg = 0
+                        if position and not velocity and manual_velocity:
+                            if abs(present_position_prev - self.present_position_deg) > 1.2 * SetupEXO.pos_unit:
+                                self.present_velocity_deg = (self.present_position_deg - present_position_prev) / (current_time - previous_time)
+                                present_position_prev = self.present_position_deg
+                            else:
+                                self.present_velocity_deg = 0
+                        previous_time = current_time
 
-                    previous_time = current_time
-
-            except Exception as e:
-                print(f'Error in motor_data: {e}')
-                self.stop_event.set()
-                os._exit(1)
+                except Exception as e:
+                    print(f'Error in motor_data: {e}')
+                    self.stop_event.set()
+                    os._exit(1)
 
     def _read_position(self):
         # Read present Position
