@@ -77,13 +77,14 @@ class SetupEXO:
             DEVICENAME: str = '/dev/ttyUSB0'
             ):
         """
-        Initialize the SetupEXO class.\n Parameters:\n
-        :param torque_limit: Maximum torque allowed on motor [Nm].\n
-        :param min_pos: Torque is set to 0 before this motor position [deg].\n
-        :param max_pos: Torque is set to 0 after this motor position [deg].\n
-        :param CONTROL_MODE: Operating mode of Dynamixel motor.\n
-        :param BAUDRATE: Communication baud rate.\n
-        :param loop_frequency: Limit of control frequency for improved consistency.\n
+        Initialize the SetupEXO class.
+
+        :param torque_limit: Maximum torque allowed on motor [Nm].
+        :param min_pos: Torque is set to 0 before this motor position [deg].
+        :param max_pos: Torque is set to 0 after this motor position [deg].
+        :param CONTROL_MODE: Operating mode of Dynamixel motor.
+        :param BAUDRATE: Communication baud rate.
+        :param loop_frequency: Limit of control frequency for improved consistency.
         :param DEVICENAME: Device name on RasPi.
         """
 
@@ -141,6 +142,7 @@ class SetupEXO:
 
     def set_baudrate(self, NEW_BAUDRATE, CURRENT_BAUDRATE = None, stop_system = False):
         """Function for setting BAUDRATE of Dynamixel
+        
         :param NEW_BAUDRATE (int): desired baudrate, default is 1Mbps
         :param CURRENT_BAUDRATE (int): if known speeds up process, else it finds it
         :param stop_system (bool): if True uses instance.CURRENT_BAUDRATE and resets it to 57600
@@ -258,6 +260,7 @@ class SetupEXO:
 
     def write_current(self, goal_cur: int):
         '''Function for writing goal current to motor in DXL units
+
         :param goal_cur: goal current in DXL units, use SetupEXO.cur_unit to translate
         '''
         if self.CONTROL_MODE not in (0,5):
@@ -274,6 +277,7 @@ class SetupEXO:
 
     def write_position(self, goal_pos: int, print_result=False):
         '''Function for writing goal position to motor in DXL units
+
         :param goal_pos: goal position in DXL units, use SetupEXO.cur_unit to translate
         '''
 
@@ -292,7 +296,8 @@ class SetupEXO:
 
     def motor_data(self, position: bool=True, velocity: bool=False, torque: bool=True, manual_velocity: bool=True, limit_frequency: bool=True, one_time: bool=False):
         '''Function for reading current Position, Velocity and Torque of motor continuously in a thread or just one time\n
-        Note that velocity reading is very slow (for some reason), that is why the default velocity reading is derived from two sequential position readings\n
+        Note that velocity reading is very slow (for some reason), that is why the default velocity reading is derived from two sequential position readings
+
         :param position: Read present position from Dynamixel API
         :param velocity: Read present velocity from Dynamixel API
         :param torque: Read present torque (current) from Dynamixel API
