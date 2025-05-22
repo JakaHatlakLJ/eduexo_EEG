@@ -13,21 +13,23 @@ from EXO_setup import SetupEXO, getch
 from Torque_profiles import TorqueProfiles
 from EXO_LSL import LSLResolver
 
-def initialize_EXO(EXO_config, setup_dict=None):
+def initialize_EXO(EXO_config, LSL, setup_dict=None):
     if setup_dict is None:
         setup_dict = {}
         
+    # Set up instructions from EXO
+    setup_dict["max_torque"] = LSL.max_torque
+    setup_dict["torque_limit"] = LSL.torque_limit
+    setup_dict["min_pos"] = LSL.min_p
+    setup_dict["max_pos"] = LSL.max_p
+    setup_dict["trial_time"] = LSL.duration_of_trials
+    setup_dict["position_control"] = LSL.incorect_execution_positon_control
+    setup_dict["tprofile_time"] = LSL.incorrect_execution_time_ms
+
     # Set up configuration parameters
-    setup_dict["torque_limit"] = EXO_config["torque_limit"]
-    setup_dict["max_torque"] = EXO_config["max_torque_during_trial"]
-    setup_dict["min_pos"] = EXO_config["min_pos"]
-    setup_dict["max_pos"] = EXO_config["max_pos"]   
     setup_dict["control_mode"] = EXO_config["DXL_control_mode"]
     setup_dict["baudrate"] = EXO_config["baudrate"]
     setup_dict["loop_frequency"] = EXO_config["control_frequency"]
-    setup_dict["trial_time"] = EXO_config["duration_of_trials"]
-    setup_dict["position_control"] = EXO_config["incorect_execution_positon_control"]
-    setup_dict["tprofile_time"] = EXO_config["incorrect_execution_time_ms"]
     setup_dict["device_name"] = EXO_config["port_name"]
     setup_dict["frequency_path"] = EXO_config["frequency_path"]
     setup_dict["save_data"] = True if EXO_config["save_data"] == 1 else False
@@ -73,16 +75,18 @@ if __name__ == "__main__":
     print("Press any key to continue! (or press ESC to quit!)")
     if getch() == chr(0x1b):
         sys.exit()
-    else:        
+    else:
+                
+        LSL = LSLResolver()
         exo_config = json.load(open(r"main/EXO_configuration.json", "r"))
-        setup_dict, profiles_position, profiles_position_dict, profiles_time, profiles_time_dict, EXO_setup = initialize_EXO(exo_config)
+        setup_dict, profiles_position, profiles_position_dict, profiles_time, profiles_time_dict, EXO_setup = initialize_EXO(exo_config, LSL)
 
         if setup_dict["save_data"]:
             frequency_file = create_file(setup_dict["frequency_path"])
         freqs = []
 
         EXO = SetupEXO(*EXO_setup)
-        LSL = LSLResolver(setup_dict["loop_frequency"], EXO.stop_event)
+        LSL.set_stop_event_frequency(setup_dict["loop_frequency"], EXO.stop_event)
         CURRENT_BAUDRATE = EXO.start_system()  # Initialize motor
 
         t0 = t1 = t5 = perf_counter()  # Used for results printing timing

@@ -1,13 +1,13 @@
 from pylsl import resolve_byprop, StreamInfo, StreamInlet, StreamOutlet, local_clock
 from time import sleep, perf_counter
-import threading
+import threading, json
 
 class LSLResolver:
     """
     Class to handle LSL (Lab Streaming Layer) communication for the EXO system.
     """
 
-    def __init__(self, loop_frequency=200, stop_event=threading.Event(), receive=True, send=True):
+    def __init__(self, receive=True, send=True):
         """
         Initialize the LSLResolver.
 
@@ -17,8 +17,16 @@ class LSLResolver:
         receive (bool): Flag to enable receiving data.
         send (bool): Flag to enable sending data.
         """
-        self.loop_frequency = loop_frequency
 
+        if receive:
+            print(f"Looking for LSL stream of type: 'SETUP'...")
+            while True:
+                # Resolve LSL stream for receiving SETUP parameters
+                streams = resolve_byprop('type', 'SETUP', timeout=10)
+                if streams:
+                    break
+                print(f"No LSL stream found of type: 'SETUP'. Retrying...")
+            
         if send:
             # Create LSL stream for sending instructions to EXO
             info = StreamInfo(
@@ -32,7 +40,25 @@ class LSLResolver:
             self.outlet = StreamOutlet(info, max_buffered=1)
             print("Stream to EXO is online...")
 
+
         if receive:
+            inlet = StreamInlet(streams[0])
+            sample = None
+            while sample is None:
+                sample, _ = inlet.pull_sample(timeout=1.0)
+            json_string = sample[0]
+            instructions = json.loads(json_string)
+            print(instructions)
+            self.max_p = instructions["maximum_arm_position_deg"]
+            self.min_p = instructions["minimum_arm_position_deg"]
+            self.max_torque = instructions["max_torque_during_trial"]
+            self.torque_limit = instructions["torque_limit"]
+            self.duration_of_trials = instructions["duration_of_trials"]
+            self.incorect_execution_positon_control = instructions["incorect_execution_positon_control"]
+            self.incorrect_execution_time_ms = instructions["incorrect_execution_time_ms"]
+
+            print("Received SETUP parameters from PC!")
+
             print(f"Looking for LSL stream of type: 'Instructions'...")
             while True:
                 # Resolve LSL stream for receiving EXO data and create an inlet
@@ -43,8 +69,11 @@ class LSLResolver:
             self.inlet = StreamInlet(streams[0])
             print("Receiving instructions from PC...")
 
-        self.stop_event = stop_event
         self.torque_profile = None
+
+    def set_stop_event_frequency(self, loop_frequency: int, stop_event=threading.Event()):
+        self.stop_event = stop_event
+        self.loop_frequency = loop_frequency
 
     def LSL_inlet(self):
         """
