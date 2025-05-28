@@ -48,10 +48,10 @@ class LSLResolver:
                 sample, _ = inlet.pull_sample(timeout=1.0)
             json_string = sample[0]
             instructions = json.loads(json_string)
-            print(instructions)
             self.max_p = instructions["maximum_arm_position_deg"]
             self.min_p = instructions["minimum_arm_position_deg"]
-            self.max_torque = instructions["max_torque_during_trial"]
+            self.center_offset = instructions["center_offset_deg"]
+            self.edge_offset = instructions["edge_offset_deg"]
             self.torque_limit = instructions["torque_limit"]
             self.duration_of_trials = instructions["duration_of_trials"]
             self.incorect_execution_positon_control = instructions["incorect_execution_positon_control"]
@@ -92,6 +92,7 @@ class LSLResolver:
                         self.torque_profile = int(sample[0])
                         self.correctness = int(sample[1])
                         self.direction = int(sample[2])
+                        self.power = sample[3]
                         self.timestamp = timestamp
                     except Exception as e:
                         print(f"Error: {e}")  # Handle potential decoding errors
