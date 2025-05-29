@@ -28,11 +28,11 @@ class LSLResolver:
                 print(f"No LSL stream found of type: 'SETUP'. Retrying...")
             
         if send:
-            # Create LSL stream for sending instructions to EXO
+            # Create LSL stream for sending motor parameters to PC
             info = StreamInfo(
                 'Stream_EXO',           # name
                 'EXO',                  # type
-                4,                      # channel_count
+                5,                      # channel_count
                 10000,                  # nominal rate=0 for irregular streams
                 'float32',              # channel format
                 'Eduexo_PC'             # source_id
@@ -53,8 +53,7 @@ class LSLResolver:
             self.center_offset = instructions["center_offset_deg"]
             self.edge_offset = instructions["edge_offset_deg"]
             self.torque_limit = instructions["torque_limit"]
-            self.duration_of_trials = instructions["duration_of_trials"]
-            self.incorect_execution_positon_control = instructions["incorect_execution_positon_control"]
+            self.incorect_execution_time_control = instructions["incorect_execution_time_control"]
             self.incorrect_execution_time_ms = instructions["incorrect_execution_time_ms"]
 
             print("Received SETUP parameters from PC!")
@@ -92,7 +91,7 @@ class LSLResolver:
                         self.torque_profile = int(sample[0])
                         self.correctness = int(sample[1])
                         self.direction = int(sample[2])
-                        self.power = sample[3]
+                        self.torque = sample[3]
                         self.timestamp = timestamp
                     except Exception as e:
                         print(f"Error: {e}")  # Handle potential decoding errors
@@ -110,7 +109,8 @@ class LSLResolver:
             motor_instance.present_position_deg, 
             motor_instance.present_velocity_deg, 
             motor_instance.present_torque, 
-            motor_instance.execution  # Assuming execution is updated elsewhere
+            motor_instance.execution,  # Assuming execution is updated elsewhere
+            motor_instance.demanded_torque
         ]
 
         # Send motor position data via stream

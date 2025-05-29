@@ -23,8 +23,7 @@ def initialize_EXO(EXO_config, LSL, setup_dict=None):
     setup_dict["max_pos"] = LSL.max_p
     setup_dict["center_offset"] = LSL.center_offset
     setup_dict["edge_offset"] = LSL.edge_offset
-    setup_dict["trial_time"] = LSL.duration_of_trials
-    setup_dict["position_control"] = LSL.incorect_execution_positon_control
+    setup_dict["time_control"] = LSL.incorect_execution_time_control
     setup_dict["tprofile_time"] = LSL.incorrect_execution_time_ms
 
     # Set up configuration parameters
@@ -35,14 +34,7 @@ def initialize_EXO(EXO_config, LSL, setup_dict=None):
     setup_dict["frequency_path"] = EXO_config["frequency_path"]
     setup_dict["save_data"] = True if EXO_config["save_data"] == 1 else False
 
-    # Unit conversion
-    pos_unit = 0.088            # [deg] = [dxl_unit] * [pos_unit]
-    vel_unit = 0.229            # [rpm] = [dxl_unit] * [vel_unit]
-    cur_unit = 2.69             # [mA]  = [dxl_unit] * [cur_unit]
-    torque_to_current = 8.247191 - 8.247191 * np.sqrt(1 - 0.082598)  # [A]
-    torque_to_current = torque_to_current * 1000.0  # [mA]
-    setup_dict["max_current"] = round(torque_to_current * LSL.torque_limit / cur_unit)  # [dxl units]
-    setup_dict["torque_to_current"] = round(torque_to_current / cur_unit)               # [dxl_units]
+    setup_dict["current_limit"] = torque_to_current(LSL.torque_limit)        # [dxl units]
 
     # Initialize torque profiles
     profiles_position = TorqueProfiles(loop_frequency=setup_dict["loop_frequency"], pulse_portion=1)
@@ -63,6 +55,22 @@ def initialize_EXO(EXO_config, LSL, setup_dict=None):
 
     return setup_dict, profiles_position, profiles_position_dict, profiles_time, profiles_time_dict, EXO_setup_list
 
+def torque_to_current(torque):
+    current = 8.247191 - 8.247191 * np.sqrt(1 - 0.082598 * torque)      # [A]
+    current = current * 1000                                            # [mA]
+    current = round(current / SetupEXO.cur_unit)                                 # [dxl_units]
+    return current
+
+def angle_interpolation(direction, angle):
+    if direction == 10:
+        travel = (angle - (EXO.mid_pos - center_offset)) / ((EXO.min_pos + edge_offset) - (EXO.mid_pos - center_offset)) * profiles_position.instances
+    elif direction == 20:
+        travel = (angle - (EXO.mid_pos + center_offset)) / ((EXO.max_pos - edge_offset) - (EXO.mid_pos + center_offset)) * profiles_position.instances
+
+    travel = int(round(travel))
+    travel = max(min(travel, len(y_list_position) - 1), 0)
+    return travel
+    
 # Function to create a file for frequency logging
 def create_file(frequency_path):
     os.makedirs(os.path.join(frequency_path), exist_ok=True)
@@ -112,7 +120,7 @@ if __name__ == "__main__":
         LSL.torque_profile = 0
         LSL.direction = 0
         LSL.correctness = 0
-        LSL.power = 1
+        LSL.torque = 1
         i = 0
         dxl_goal_current = 0
         travel = 0
@@ -139,16 +147,24 @@ if __name__ == "__main__":
                         timestamp = LSL.timestamp
 
                     if timestamp != previous_timestamp:
-                        y_list_position = profiles_position_dict[LSL.torque_profile]
-                        y_list_time = profiles_time_dict[LSL.torque_profile]
-                        direction = LSL.direction
-                        correctness = LSL.correctness
-                        power = round(LSL.power, 3)
+                        if LSL.direction == 99:
+                            raise KeyboardInterrupt
+                        elif LSL.direction not in (10, 20):
+                            execute = False
+                            EXO.execution = 0
+                            dxl_goal_current = 0
+                            EXO.write_current(dxl_goal_current)
+                        else:    
+                            y_list_position = profiles_position_dict[LSL.torque_profile]
+                            y_list_time = profiles_time_dict[LSL.torque_profile]
+                            direction = LSL.direction
+                            correctness = LSL.correctness
+                            torque = round(LSL.torque, 3)
 
-                        i = 0
-                        execute = True
-                        start_time = perf_counter()
-                        print(f"Torque Profile: {LSL.torque_profile}, Correctness: {correctness}, Direction: {direction}, Power level: {power}")
+                            i = 0
+                            execute = True
+                            start_time = perf_counter()
+                            print(f"Torque Profile: {LSL.torque_profile}, Correctness: {correctness}, Direction: {direction}, torque level: {torque}")
                         
                     if present_position_deg < EXO.min_pos + edge_offset or EXO.max_pos - edge_offset < present_position_deg:
                         execute = False 
@@ -157,43 +173,34 @@ if __name__ == "__main__":
                         EXO.write_current(dxl_goal_current)
                     else:
                         if execute:  
-                            if current_time - start_time >= setup_dict["trial_time"]:
-                                execute = False 
-                                EXO.execution = 0
-                                dxl_goal_current = 0
+                            if i >= len(y_list_time):
+                                execute = False
                             else:
                                 if EXO.execution != 1:
                                     EXO.execution = 1                                         
-                                if correctness == 1:
-                                    if direction == 20:
-                                        travel = int(round((present_position_deg - (EXO.mid_pos + center_offset)) / ((EXO.max_pos - edge_offset) - (EXO.mid_pos + center_offset)) * profiles_position.instances))
-                                        travel = max(min(travel, len(y_list_position) - 1), 0)
-                                        dxl_goal_current = int(round(setup_dict["torque_to_current"] * y_list_position[travel] * power))
+                                travel = angle_interpolation(direction, present_position_deg)
+                                if direction == 20:
+                                    if correctness == 1:
+                                        dxl_goal_current = int(round(torque_to_current(torque) * y_list_position[travel]))
                                     else:
-                                        travel = int(round((present_position_deg - (EXO.mid_pos - center_offset)) / ((EXO.min_pos + edge_offset) - (EXO.mid_pos - center_offset)) * profiles_position.instances))
-                                        travel = max(min(travel, len(y_list_position) - 1), 0)
-                                        dxl_goal_current = int(round(-setup_dict["torque_to_current"] * y_list_position[travel] * power))
+                                        if not setup_dict["time_control"]:                                          
+                                            dxl_goal_current = int(round(-torque_to_current(torque) * y_list_position[travel]))
+                                        else:
+                                            dxl_goal_current = int(round(-torque_to_current(torque) * y_list_time[i]))
+                                            i += 1
                                 else:
-                                    if setup_dict["position_control"]:    
-                                        if direction == 20:
-                                            travel = int(round((present_position_deg - (EXO.mid_pos + center_offset)) / ((EXO.max_pos - edge_offset) - (EXO.mid_pos + center_offset)) * profiles_position.instances))
-                                            travel = max(min(travel, len(y_list_position) - 1), 0)
-                                            dxl_goal_current = int(round(setup_dict["torque_to_current"] * y_list_position[travel] * power))                                    
-                                        else:
-                                            travel = int(round((present_position_deg - (EXO.mid_pos - center_offset)) / ((EXO.min_pos + edge_offset) - (EXO.mid_pos - center_offset)) * profiles_position.instances))
-                                            travel = max(min(travel, len(y_list_position) - 1), 0)
-                                            dxl_goal_current = int(round(-setup_dict["torque_to_current"] * y_list_position[travel] * power))
+                                    if correctness == 1:
+                                        dxl_goal_current = int(round(-torque_to_current(torque) * y_list_position[travel]))
                                     else:
-                                        if i >= len(y_list_time):
-                                            execute = False
-                                            i = 0
-                                            continue
-                                        if LSL.direction == 20:
-                                            dxl_goal_current = int(round(setup_dict["torque_to_current"] * y_list_time[i] * power))
+                                        if not setup_dict["time_control"]:                                          
+                                            dxl_goal_current = int(round(torque_to_current(torque) * y_list_position[travel]))
                                         else:
-                                            dxl_goal_current = int(round(-setup_dict["torque_to_current"] * y_list_time[i] * power))
-                                        i += 1
-
+                                            dxl_goal_current = int(round(torque_to_current(torque) * y_list_time[i]))
+                                            i += 1
+                            
+                            EXO.demanded_torque = (1 - (1 - dxl_goal_current * 1000*SetupEXO.cur_unit / 8.247191)**2) / 0.082598  # [Nm]
+                            if dxl_goal_current < 0:
+                                EXO.demanded_torque = -EXO.demanded_torque
                             EXO.write_current(dxl_goal_current)
                             
                     freq = 1 / (current_time - previous_time)

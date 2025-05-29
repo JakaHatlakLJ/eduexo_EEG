@@ -124,6 +124,7 @@ class SetupEXO:
         self.present_velocity_deg = 0
         self.present_torque = 0
         self.execution = 0
+        self.demanded_torque = 0
         
     def find_current_baudrate(self):
         """Function for finding current baudrate"""
@@ -404,7 +405,9 @@ class SetupEXO:
                 print("%s" % self.packetHandler.getRxPacketError(dxl_error))
         b3 = dxl_present_current.to_bytes(2, byteorder=sys.byteorder, signed=False) 
         dxl_present_current = int.from_bytes(b3, byteorder=sys.byteorder, signed=True)
-        self.present_torque = 0.082598 * (1 - (1 - dxl_present_current * SetupEXO.cur_unit / 8.247191)**2)  # [mNm]
+        self.present_torque = (1 - (1 - dxl_present_current * 1000*SetupEXO.cur_unit / 8.247191)**2) / 0.082598  # [Nm]
+        if dxl_present_current < 0:
+            self.present_torque = -self.present_torque
         return self.present_torque
 
     def _set_torque_limit(self, torque_limit):
