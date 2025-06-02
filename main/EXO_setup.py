@@ -405,9 +405,9 @@ class SetupEXO:
                 print("%s" % self.packetHandler.getRxPacketError(dxl_error))
         b3 = dxl_present_current.to_bytes(2, byteorder=sys.byteorder, signed=False) 
         dxl_present_current = int.from_bytes(b3, byteorder=sys.byteorder, signed=True)
-        self.present_torque = (1 - (1 - dxl_present_current * 1000*SetupEXO.cur_unit / 8.247191)**2) / 0.082598  # [Nm]
-        if dxl_present_current < 0:
-            self.present_torque = -self.present_torque
+        self.present_current = dxl_present_current * SetupEXO.cur_unit / 1000   # [A]
+        self.present_torque = self.current_to_torque(dxl_present_current)
+
         return self.present_torque
 
     def _set_torque_limit(self, torque_limit):
@@ -480,6 +480,40 @@ class SetupEXO:
                     print("Torque is disabled.")
                     SetupEXO.led.off() # Turn LED off
                     self.torque_enabled = False
+
+    @staticmethod
+    def torque_to_current(torque: float):
+        """
+        Function for converting torque in Nm to current in DXL units
+
+        :param torque: Torque in Nm to convert to current 
+        """
+        if torque < 0:
+            current = 8.247191 - 8.247191 * np.sqrt(1 + 0.082598 * torque)      # [A]
+            current = -current
+        else:
+            current = 8.247191 - 8.247191 * np.sqrt(1 - 0.082598 * torque)      # [A]
+        
+        current = current * 1000                                                # [mA]
+        current = round(current / SetupEXO.cur_unit)                            # [dxl_units]
+        return current
+
+    @staticmethod
+    def current_to_torque(current: int):
+        """
+        Function for converting current in DXL units to torque in Nm
+
+        :param current: Current in DXL units to convert to torque 
+        """
+        current = current * SetupEXO.cur_unit                           # [mA]
+        current = current / 1000                                        # [A]
+        if current < 0:
+            torque = (1 - (1 + current / 8.247191)**2) / 0.082598       # [Nm]
+            torque = -torque
+        else:
+            torque = (1 - (1 - current / 8.247191)**2) / 0.082598       # [Nm]
+
+        return torque
 
 if __name__ == "__main__":
     print(f"resetting EXO")

@@ -153,6 +153,7 @@ if __name__ == "__main__":
                             execute = False
                             EXO.execution = 0
                             dxl_goal_current = 0
+                            EXO.demanded_torque = 0
                             EXO.write_current(dxl_goal_current)
                         else:    
                             y_list_position = profiles_position_dict[LSL.torque_profile]
@@ -170,6 +171,7 @@ if __name__ == "__main__":
                         execute = False 
                         EXO.execution = 0
                         dxl_goal_current = 0
+                        EXO.demanded_torque = 0
                         EXO.write_current(dxl_goal_current)
                     else:
                         if execute:  
@@ -197,10 +199,8 @@ if __name__ == "__main__":
                                         else:
                                             dxl_goal_current = int(round(torque_to_current(torque) * y_list_time[i]))
                                             i += 1
-                            
-                            EXO.demanded_torque = (1 - (1 - dxl_goal_current * 1000*SetupEXO.cur_unit / 8.247191)**2) / 0.082598  # [Nm]
-                            if dxl_goal_current < 0:
-                                EXO.demanded_torque = -EXO.demanded_torque
+                
+                            EXO.demanded_torque = EXO.current_to_torque(dxl_goal_current)    
                             EXO.write_current(dxl_goal_current)
                             
                     freq = 1 / (current_time - previous_time)
