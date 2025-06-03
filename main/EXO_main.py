@@ -14,6 +14,17 @@ from Torque_profiles import TorqueProfiles
 from EXO_LSL import LSLResolver
 
 def initialize_EXO(EXO_config, LSL, setup_dict=None):
+    """
+    Initializes the exoskeleton system and prepares torque profiles.
+
+    Args:
+        EXO_config (dict): Configuration parameters loaded from JSON.
+        LSL (LSLResolver): LSLResolver instance for signal integration.
+        setup_dict (dict, optional): Dictionary for setup parameters.
+
+    Returns:
+        tuple: (setup_dict, profiles_position, profiles_position_dict, profiles_time, profiles_time_dict, EXO_setup_list)
+    """
     if setup_dict is None:
         setup_dict = {}
         
@@ -56,12 +67,31 @@ def initialize_EXO(EXO_config, LSL, setup_dict=None):
     return setup_dict, profiles_position, profiles_position_dict, profiles_time, profiles_time_dict, EXO_setup_list
 
 def torque_to_current(torque):
+    """
+    Converts a given torque value to Dynamixel current units.
+
+    Args:
+        torque (float): Desired torque in Nm.
+
+    Returns:
+        int: Corresponding Dynamixel current units.
+    """
     current = 8.247191 - 8.247191 * np.sqrt(1 - 0.082598 * torque)      # [A]
     current = current * 1000                                            # [mA]
     current = round(current / SetupEXO.cur_unit)                                 # [dxl_units]
     return current
 
 def angle_interpolation(direction, angle):
+    """
+    Calculates the profile index for the desired angle based on movement direction.
+
+    Args:
+        direction (int): Movement direction (10 or 20).
+        angle (float): Current joint angle in degrees.
+
+    Returns:
+        int: Index for the torque profile array.
+    """
     if direction == 10:
         travel = (angle - (EXO.mid_pos - center_offset)) / ((EXO.min_pos + edge_offset) - (EXO.mid_pos - center_offset)) * profiles_position.instances
     elif direction == 20:
@@ -71,8 +101,16 @@ def angle_interpolation(direction, angle):
     travel = max(min(travel, len(y_list_position) - 1), 0)
     return travel
     
-# Function to create a file for frequency logging
 def create_file(frequency_path):
+    """
+    Creates a new file for logging frequency data.
+
+    Args:
+        frequency_path (str): Directory path to save frequency files.
+
+    Returns:
+        file object: Opened file handle for writing frequency data.
+    """  
     os.makedirs(os.path.join(frequency_path), exist_ok=True)
     file_idx = len([filename for filename in os.listdir(os.path.join(frequency_path)) if filename.startswith("frequency_data")])
     file_idx = f'{file_idx:02d}'
@@ -80,7 +118,15 @@ def create_file(frequency_path):
     return frequency_file
 
 if __name__ == "__main__":
-
+    """
+    Main execution for the exoskeleton control loop:
+        - Waits for user input to begin.
+        - Loads configuration and sets up the exoskeleton and LSL.
+        - Starts threads for motor and LSL data acquisition.
+        - Runs the main control loop, updating exoskeleton actuation based on LSL input.
+        - Handles safe shutdown and frequency data logging.
+    """
+    
     # Start of new loop
     print("Press any key to continue! (or press ESC to quit!)")
     if getch() == chr(0x1b):

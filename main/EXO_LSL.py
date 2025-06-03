@@ -4,50 +4,53 @@ import threading, json
 
 class LSLResolver:
     """
-    Class to handle LSL (Lab Streaming Layer) communication for the EXO system.
+    Handles Lab Streaming Layer (LSL) communication for the EXO system.
+
+    This class can both send and receive data streams using LSL, facilitating communication
+    of setup parameters, control instructions, and motor data between the EXO hardware and PC.
     """
 
     def __init__(self, receive=True, send=True):
         """
-        Initialize the LSLResolver.
+        Initialize the LSLResolver, resolving and/or creating the necessary LSL streams.
 
-        Parameters:
-        loop_frequency (int): Frequency of the loop in Hz.
-        stop_event (threading.Event): Event to signal stopping of threads.
-        receive (bool): Flag to enable receiving data.
-        send (bool): Flag to enable sending data.
+        Args:
+            receive (bool): If True, resolves input LSL streams for receiving data.
+            send (bool): If True, creates an LSL stream for sending data.
         """
 
         if receive:
             print(f"Looking for LSL stream of type: 'SETUP'...")
             while True:
-                # Resolve LSL stream for receiving SETUP parameters
+                # Try to resolve an LSL stream of type 'SETUP' (from PC)
                 streams = resolve_byprop('type', 'SETUP', timeout=10)
                 if streams:
                     break
                 print(f"No LSL stream found of type: 'SETUP'. Retrying...")
             
         if send:
-            # Create LSL stream for sending motor parameters to PC
+            # Create an LSL stream for sending EXO data to the PC
             info = StreamInfo(
-                'Stream_EXO',           # name
-                'EXO',                  # type
-                5,                      # channel_count
-                10000,                  # nominal rate=0 for irregular streams
-                'float32',              # channel format
-                'Eduexo_PC'             # source_id
+                'Stream_EXO',           # Stream name
+                'EXO',                  # Stream type
+                5,                      # Number of channels
+                10000,                  # Data rate (Hz)
+                'float32',              # Channel format
+                'Eduexo_PC'             # Source ID
             )
             self.outlet = StreamOutlet(info, max_buffered=1)
             print("Stream to EXO is online...")
 
-
         if receive:
+            # Receive setup parameters as a JSON-formatted string
             inlet = StreamInlet(streams[0])
             sample = None
             while sample is None:
                 sample, _ = inlet.pull_sample(timeout=1.0)
             json_string = sample[0]
             instructions = json.loads(json_string)
+
+            # Store setup parameters as attributes
             self.max_p = instructions["maximum_arm_position_deg"]
             self.min_p = instructions["minimum_arm_position_deg"]
             self.center_offset = instructions["center_offset_deg"]
@@ -60,7 +63,7 @@ class LSLResolver:
 
             print(f"Looking for LSL stream of type: 'Instructions'...")
             while True:
-                # Resolve LSL stream for receiving EXO data and create an inlet
+                # Resolve the stream for receiving instructions
                 streams = resolve_byprop('type', 'Instructions', timeout=10)
                 if streams:
                     break
@@ -68,15 +71,24 @@ class LSLResolver:
             self.inlet = StreamInlet(streams[0])
             print("Receiving instructions from PC...")
 
-        self.torque_profile = None
+        self.torque_profile = None  # Placeholder for the latest torque profile
 
     def set_stop_event_frequency(self, loop_frequency: int, stop_event=threading.Event()):
+        """
+        Set the stop event and loop frequency for streaming threads.
+
+        Args:
+            loop_frequency (int): Frequency of the loop in Hz.
+            stop_event (threading.Event): Event to signal threads to stop.
+        """
         self.stop_event = stop_event
         self.loop_frequency = loop_frequency
 
     def LSL_inlet(self):
         """
-        Method to continuously receive data from the LSL stream.
+        Continuously receive and process samples from the LSL inlet stream.
+
+        Updates the torque profile and other attributes based on incoming data.
         """
         previous_t = perf_counter()
         while not self.stop_event.is_set():
@@ -87,33 +99,31 @@ class LSLResolver:
 
                 if sample is not None:
                     try:
-                        # Extract data from the sample
+                        # Unpack incoming sample values
                         self.torque_profile = int(sample[0])
                         self.correctness = int(sample[1])
                         self.direction = int(sample[2])
                         self.torque = sample[3]
                         self.timestamp = timestamp
                     except Exception as e:
-                        print(f"Error: {e}")  # Handle potential decoding errors
+                        print(f"Error: {e}")  # Handle conversion or unpacking errors
                 
                 previous_t = current_t
         
     def LSL_outlet(self, motor_instance):
         """
-        Method to send data to the LSL stream.
+        Send current motor information as a sample through the LSL outlet stream.
 
-        Parameters:
-        motor_instance: Instance of the motor to get data from.
+        Args:
+            motor_instance: Instance of the motor class holding state to transmit.
         """
         DATA = [
-            motor_instance.present_position_deg, 
-            motor_instance.present_velocity_deg, 
-            motor_instance.present_torque, 
-            motor_instance.execution,  # Assuming execution is updated elsewhere
-            motor_instance.demanded_torque
+            motor_instance.present_position_deg,  # Current position in degrees
+            motor_instance.present_velocity_deg,  # Current velocity in degrees/sec
+            motor_instance.present_torque,        # Current torque
+            motor_instance.execution,             # Execution state
+            motor_instance.demanded_torque        # Commanded torque
         ]
 
-        # Send motor position data via stream
+        # Transmit the data sample to the stream
         self.outlet.push_sample(DATA)
-
-
