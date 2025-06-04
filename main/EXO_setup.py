@@ -32,7 +32,7 @@ class SetupEXO:
     """
 
     # BAUDRATE dictionary
-    baud_dict = {9600 : 0, 57600 : 1, 115200 : 2, 1000000 : 3, 2000000 : 4, 3000000 : 5, 4000000 : 6, 4500000 : 7}
+    baud_dict = {9600 : 0, 57600 : 1, 115200 : 2, 1000000 : 3, 2000000 : 4, 3000000 : 5, 4000000 : 6}
     control_mode_dict = {0 : "Current control", 1 : "Velocity control", 3 : "Position control", 4 : "Extended Position control", 5 : "Current-based Position control", 16 : "PWM (Voltage) control"}
 
     # DYNAMIXEL SETTINGS

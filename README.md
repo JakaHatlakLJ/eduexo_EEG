@@ -106,19 +106,12 @@ This will start the experiment based on the configurations prepared in the previ
 ### `EXO_configuration.json` explanation
 ```json
 {
-    "torque_limit": 8                           "Maximum torque limit for the motor",
-    "max_torque_during_trial": 4                "Maximum torque allowed during a trial",
-    "min_pos": 55                               "Minimum position limit for the motor",
-    "max_pos": 165                              "Maximum position limit for the motor",
     "DXL_control_mode": 0                       "Control mode for the Dynamixel motor (0 for current control)",
-    "baudrate": 1000000                         "Communication baud rate for the motor",
-    "control_frequency": 200                    "Frequency at which the program operates for better consistency",
-    "duration_of_trials": 3.5                   "Duration of each trial in seconds",
-    "incorect_execution_positon_control": 0     "Flag for incorrect execution mode (0 time controled, 1 position controled)",
-    "incorrect_execution_time_ms": 500          "Time duration in milliseconds for time controled incorrect execution",
-    "port_name":                                "/dev/ttyUSB0"  "Port name for the motor connection",
-    "frequency_path":                           "./frequency_data"  "Path to save frequency data",
-    "save_data": 1                              "Flag to save data (1 to save, 0 not to save)"
+    "baudrate": 3000000                         "Communication baud rate for the motor",
+    "control_frequency": 200                    "Frequency limit at which the program operates",
+    "port_name":"/dev/ttyUSB0"                  "Port name for the motor connection",
+    "frequency_path": "./frequency_data"        "Path to save frequency data",
+    "save_data": 0                              "Flag to save data (1 to save, 0 not to save)"
 }
 ```
 
