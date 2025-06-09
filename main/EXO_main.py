@@ -9,6 +9,7 @@ from dynamixel_sdk import *
 import threading
 import json
 import serial
+import struct
 
 from EXO_setup import SetupEXO, getch
 from Torque_profiles import TorqueProfiles
@@ -135,11 +136,11 @@ if __name__ == "__main__":
     if getch() == chr(0x1b):
         sys.exit()
     else:
-        # ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1.0)      # open serial # timeout is the amount of time the command waits for data
-        # time.sleep(3)                                               # gives Arduino time to start serial
-        # ser.reset_input_buffer()                                    # fresh buffer
-        # force = []
-        # print('Serial OK')
+        ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1.0)      # open serial # timeout is the amount of time the command waits for data
+        time.sleep(3)                                               # gives Arduino time to start serial
+        ser.reset_input_buffer()                                    # fresh buffer
+        force = []
+        print('Serial OK')
                 
         LSL = LSLResolver()
         exo_config = json.load(open(r"/home/eduexo/eduexo_EEG/main/EXO_configuration.json", "r"))
@@ -204,6 +205,7 @@ if __name__ == "__main__":
 
                     if timestamp != previous_timestamp:
                         previous_timestamp = timestamp
+                        skip_first_freq = True
                         if LSL.direction == 99:
                             raise KeyboardInterrupt
                         elif LSL.direction not in (10, 20):
@@ -260,11 +262,18 @@ if __name__ == "__main__":
                             EXO.demanded_torque = EXO.current_to_torque(dxl_goal_current)  
                             EXO.write_current(dxl_goal_current)
                             freq = 1 / (current_time - previous_time)
-                            freqs.append(freq)
+                            if not skip_first_freq:    
+                                freqs.append(freq)
+                            else:
+                                skip_first_freq = False
 
-                    # ard_line = ser.readline().decode('utf-8').strip()
-                    # ser.reset_input_buffer()
-                    # force.append(ard_line)
+                    if ser.in_waiting >= 4:
+                        raw_bytes = ser.read(4)
+                        force_value = struct.unpack('f', raw_bytes)[0]
+                        # print(f"Force: {force_value:.2f} N")
+                        ser.reset_input_buffer()
+                        EXO.present_force = force_value
+                        force.append(force_value)
 
                     previous_time = current_time
                     LSL.LSL_outlet(EXO)

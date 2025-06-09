@@ -33,7 +33,7 @@ class LSLResolver:
             info = StreamInfo(
                 'Stream_EXO',           # Stream name
                 'EXO',                  # Stream type
-                5,                      # Number of channels
+                6,                      # Number of channels
                 10000,                  # Data rate (Hz)
                 'float32',              # Channel format
                 'Eduexo_PC'             # Source ID
@@ -118,11 +118,12 @@ class LSLResolver:
             motor_instance: Instance of the motor class holding state to transmit.
         """
         DATA = [
-            motor_instance.present_position_deg,  # Current position in degrees
-            motor_instance.present_velocity_deg,  # Current velocity in degrees/sec
-            motor_instance.present_torque,        # Current torque
-            motor_instance.execution,             # Execution state
-            motor_instance.demanded_torque        # Commanded torque
+            motor_instance.present_position_deg,    # Current position in degrees
+            motor_instance.present_velocity_deg,    # Current velocity in degrees/sec
+            motor_instance.present_torque,          # Current torque
+            motor_instance.execution,               # Execution state
+            motor_instance.demanded_torque,         # Commanded torque
+            motor_instance.present_force            # Current force on Load-cell
         ]
 
         # Transmit the data sample to the stream
