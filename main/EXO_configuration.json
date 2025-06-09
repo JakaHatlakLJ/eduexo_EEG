@@ -1,6 +1,6 @@
 {
     "DXL_control_mode": 0,
-    "baudrate": 3000000,
+    "baudrate": 2000000,
     "control_frequency": 140,
     "port_name": "/dev/ttyUSB0",
     "frequency_path": "./frequency_data",

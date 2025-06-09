@@ -8,6 +8,7 @@ import numpy as np
 from dynamixel_sdk import * 
 import threading
 import json
+import serial
 
 from EXO_setup import SetupEXO, getch
 from Torque_profiles import TorqueProfiles
@@ -115,6 +116,8 @@ def create_file(frequency_path):
     file_idx = len([filename for filename in os.listdir(os.path.join(frequency_path)) if filename.startswith("frequency_data")])
     file_idx = f'{file_idx:02d}'
     frequency_file = open(os.path.join(frequency_path, f"frequency_data_EXO_{file_idx}.txt"), "w")
+    # force_file = open(os.path.join(frequency_path, f"force_data_EXO_{file_idx}.txt"), "w")
+    # return frequency_file, force_file
     return frequency_file
 
 if __name__ == "__main__":
@@ -132,12 +135,18 @@ if __name__ == "__main__":
     if getch() == chr(0x1b):
         sys.exit()
     else:
+        # ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1.0)      # open serial # timeout is the amount of time the command waits for data
+        # time.sleep(3)                                               # gives Arduino time to start serial
+        # ser.reset_input_buffer()                                    # fresh buffer
+        # force = []
+        # print('Serial OK')
                 
         LSL = LSLResolver()
-        exo_config = json.load(open(r"main/EXO_configuration.json", "r"))
+        exo_config = json.load(open(r"/home/eduexo/eduexo_EEG/main/EXO_configuration.json", "r"))
         setup_dict, profiles_position, profiles_position_dict, profiles_time, profiles_time_dict, EXO_setup = initialize_EXO(exo_config, LSL)
 
         if setup_dict["save_data"]:
+            # frequency_file, force_file = create_file(setup_dict["frequency_path"])
             frequency_file = create_file(setup_dict["frequency_path"])
         freqs = []
 
@@ -160,6 +169,7 @@ if __name__ == "__main__":
             daemon=True
         )
         LSL_inlet_thread.start()
+
 
         LSL.timestamp = 0
         previous_timestamp = 0
@@ -193,6 +203,7 @@ if __name__ == "__main__":
                         timestamp = LSL.timestamp
 
                     if timestamp != previous_timestamp:
+                        previous_timestamp = timestamp
                         if LSL.direction == 99:
                             raise KeyboardInterrupt
                         elif LSL.direction not in (10, 20):
@@ -246,12 +257,15 @@ if __name__ == "__main__":
                                             dxl_goal_current = int(round(torque_to_current(torque) * y_list_time[i]))
                                             i += 1
                 
-                            EXO.demanded_torque = EXO.current_to_torque(dxl_goal_current)    
+                            EXO.demanded_torque = EXO.current_to_torque(dxl_goal_current)  
                             EXO.write_current(dxl_goal_current)
-                            
-                    freq = 1 / (current_time - previous_time)
-                    freqs.append(freq)
-                    previous_timestamp = timestamp
+                            freq = 1 / (current_time - previous_time)
+                            freqs.append(freq)
+
+                    # ard_line = ser.readline().decode('utf-8').strip()
+                    # ser.reset_input_buffer()
+                    # force.append(ard_line)
+
                     previous_time = current_time
                     LSL.LSL_outlet(EXO)
 
@@ -261,6 +275,9 @@ if __name__ == "__main__":
                 frequency_file.write("\n".join(str(f) for f in freqs) + "\n")
                 freqs = []
                 frequency_file.close()
+                # force_file.write("\n".join(f for f in freqs) + "\n")
+                # force = []
+                # force_file.close()
 
         finally:
             EXO.stop_event.set()
