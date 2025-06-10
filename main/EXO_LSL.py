@@ -51,6 +51,7 @@ class LSLResolver:
             instructions = json.loads(json_string)
 
             # Store setup parameters as attributes
+            self.lever = instructions["forearm_attachment_leverage_mm"] / 1000
             self.max_p = instructions["maximum_arm_position_deg"]
             self.min_p = instructions["minimum_arm_position_deg"]
             self.center_offset = instructions["center_offset_deg"]

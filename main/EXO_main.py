@@ -117,8 +117,6 @@ def create_file(frequency_path):
     file_idx = len([filename for filename in os.listdir(os.path.join(frequency_path)) if filename.startswith("frequency_data")])
     file_idx = f'{file_idx:02d}'
     frequency_file = open(os.path.join(frequency_path, f"frequency_data_EXO_{file_idx}.txt"), "w")
-    # force_file = open(os.path.join(frequency_path, f"force_data_EXO_{file_idx}.txt"), "w")
-    # return frequency_file, force_file
     return frequency_file
 
 if __name__ == "__main__":
@@ -147,7 +145,6 @@ if __name__ == "__main__":
         setup_dict, profiles_position, profiles_position_dict, profiles_time, profiles_time_dict, EXO_setup = initialize_EXO(exo_config, LSL)
 
         if setup_dict["save_data"]:
-            # frequency_file, force_file = create_file(setup_dict["frequency_path"])
             frequency_file = create_file(setup_dict["frequency_path"])
         freqs = []
 
@@ -270,9 +267,9 @@ if __name__ == "__main__":
                     if ser.in_waiting >= 4:
                         raw_bytes = ser.read(4)
                         force_value = struct.unpack('f', raw_bytes)[0]
-                        # print(f"Force: {force_value:.2f} N")
+                        force_value = -force_value
                         ser.reset_input_buffer()
-                        EXO.present_force = force_value
+                        EXO.present_force = force_value * LSL.lever
                         force.append(force_value)
 
                     previous_time = current_time
@@ -284,9 +281,6 @@ if __name__ == "__main__":
                 frequency_file.write("\n".join(str(f) for f in freqs) + "\n")
                 freqs = []
                 frequency_file.close()
-                # force_file.write("\n".join(f for f in freqs) + "\n")
-                # force = []
-                # force_file.close()
 
         finally:
             EXO.stop_event.set()
