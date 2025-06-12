@@ -124,6 +124,7 @@ class SetupEXO:
         self.present_velocity_deg = 0
         self.present_torque = 0
         self.execution = 0
+        self.desired_torque = 0
         self.demanded_torque = 0
         
     def find_current_baudrate(self):

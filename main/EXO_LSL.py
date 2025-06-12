@@ -33,7 +33,7 @@ class LSLResolver:
             info = StreamInfo(
                 'Stream_EXO',           # Stream name
                 'EXO',                  # Stream type
-                6,                      # Number of channels
+                7,                      # Number of channels
                 10000,                  # Data rate (Hz)
                 'float32',              # Channel format
                 'Eduexo_PC'             # Source ID
@@ -59,6 +59,11 @@ class LSLResolver:
             self.torque_limit = instructions["torque_limit"]
             self.incorect_execution_time_control = instructions["incorect_execution_time_control"]
             self.incorrect_execution_time_ms = instructions["incorrect_execution_time_ms"]
+            self.PID_controller = instructions["PID_control"]
+            self.FKp = instructions["PID_parameters"]["FKp"]
+            self.FKd = instructions["PID_parameters"]["FKd"]
+            self.VKp = instructions["PID_parameters"]["VKp"]
+
 
             print("Received SETUP parameters from PC!")
 
@@ -123,8 +128,9 @@ class LSLResolver:
             motor_instance.present_velocity_deg,    # Current velocity in degrees/sec
             motor_instance.present_torque,          # Current torque
             motor_instance.execution,               # Execution state
+            motor_instance.desired_torque,          # Desired torque
             motor_instance.demanded_torque,         # Commanded torque
-            motor_instance.present_force            # Current force on Load-cell
+            motor_instance.present_torque           # Current torque from force on Load-cell
         ]
 
         # Transmit the data sample to the stream

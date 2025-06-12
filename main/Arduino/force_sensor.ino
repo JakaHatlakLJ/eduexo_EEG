@@ -7,7 +7,7 @@ const float coefficient = 0.199327;
 const float offset = -0.0633;
 float force;
 int sensorMovingAvg;
-movingAvg mySensor(100);
+movingAvg mySensor(50);
 
 void setup() {
   // put your setup code here, to run once:

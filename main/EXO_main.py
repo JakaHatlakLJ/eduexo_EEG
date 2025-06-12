@@ -78,9 +78,12 @@ def torque_to_current(torque):
     Returns:
         int: Corresponding Dynamixel current units.
     """
-    current = 8.247191 - 8.247191 * np.sqrt(1 - 0.082598 * torque)      # [A]
-    current = current * 1000                                            # [mA]
-    current = round(current / SetupEXO.cur_unit)                                 # [dxl_units]
+    if torque >= 0:
+        current = 8.247191 - 8.247191 * np.sqrt(1 - 0.082598 * torque)      # [A]
+    else:
+        current = -(8.247191 - 8.247191 * np.sqrt(1 - 0.082598 * -torque))  # [A]
+    current = current * 1000                                                # [mA]
+    current = round(current / SetupEXO.cur_unit)                            # [dxl_units]
     return current
 
 def angle_interpolation(direction, angle):
@@ -100,7 +103,9 @@ def angle_interpolation(direction, angle):
         travel = (angle - (EXO.mid_pos + center_offset)) / ((EXO.max_pos - edge_offset) - (EXO.mid_pos + center_offset)) * profiles_position.instances
 
     travel = int(round(travel))
-    travel = max(min(travel, len(y_list_position) - 1), 0)
+    travel = min(travel, len(y_list_position) - 1)
+    if travel <= 0:
+        travel = -1
     return travel
     
 def create_file(frequency_path):
@@ -180,6 +185,7 @@ if __name__ == "__main__":
         travel = 0
         center_offset = setup_dict["center_offset"]
         edge_offset = setup_dict["edge_offset"]
+        previous_torque_error = 0
 
         try:
             # Enable Torque and set Bus Watchdog
@@ -209,6 +215,7 @@ if __name__ == "__main__":
                             execute = False
                             EXO.execution = 0
                             dxl_goal_current = 0
+                            EXO.desired_torque = 0
                             EXO.demanded_torque = 0
                             EXO.write_current(dxl_goal_current)
                         else:    
@@ -227,6 +234,7 @@ if __name__ == "__main__":
                         execute = False 
                         EXO.execution = 0
                         dxl_goal_current = 0
+                        EXO.desired_torque = 0
                         EXO.demanded_torque = 0
                         EXO.write_current(dxl_goal_current)
                     else:
@@ -237,26 +245,49 @@ if __name__ == "__main__":
                                 if EXO.execution != 1:
                                     EXO.execution = 1                                         
                                 travel = angle_interpolation(direction, present_position_deg)
-                                if direction == 20:
-                                    if correctness == 1:
-                                        dxl_goal_current = int(round(torque_to_current(torque) * y_list_position[travel]))
-                                    else:
-                                        if not setup_dict["time_control"]:                                          
-                                            dxl_goal_current = int(round(-torque_to_current(torque) * y_list_position[travel]))
-                                        else:
-                                            dxl_goal_current = int(round(-torque_to_current(torque) * y_list_time[i]))
-                                            i += 1
+                                if travel == -1:
+                                    dxl_goal_current = 0
+                                    EXO.desired_torque = 0
                                 else:
-                                    if correctness == 1:
-                                        dxl_goal_current = int(round(-torque_to_current(torque) * y_list_position[travel]))
-                                    else:
-                                        if not setup_dict["time_control"]:                                          
-                                            dxl_goal_current = int(round(torque_to_current(torque) * y_list_position[travel]))
+                                    if direction == 20:
+                                        if correctness == 1:
+                                            goal_torque = torque * y_list_position[travel]
                                         else:
-                                            dxl_goal_current = int(round(torque_to_current(torque) * y_list_time[i]))
-                                            i += 1
-                
-                            EXO.demanded_torque = EXO.current_to_torque(dxl_goal_current)  
+                                            if not setup_dict["time_control"]:                                          
+                                                goal_torque = -torque * y_list_position[travel]
+                                            else:
+                                                goal_torque = -torque * y_list_time[i]
+                                                i += 1
+                                    else:
+                                        if correctness == 1:
+                                            goal_torque = -torque * y_list_position[travel]
+                                        else:
+                                            if not setup_dict["time_control"]:                                          
+                                                goal_torque = torque * y_list_position[travel]
+                                            else:
+                                                goal_torque = torque * y_list_time[i]
+                                                i += 1
+                                                
+                                                
+                                    EXO.desired_torque = goal_torque
+                                    if LSL.PID_controller:
+                                        if correctness == 0:
+                                            if abs(EXO.present_torque) > abs(goal_torque):
+                                                torque_error = (goal_torque - EXO.present_torque)
+                                                d_torque_error = (previous_torque_error - torque_error) / (current_time - previous_time)
+                                                if goal_torque >= 0:
+                                                    corrected_goal_torque = min(goal_torque + LSL.FKp * torque_error + LSL.FKd * d_torque_error - LSL.VKp * EXO.present_velocity_deg, torque)
+                                                else:
+                                                    corrected_goal_torque = max(goal_torque + LSL.FKp * torque_error + LSL.FKd * d_torque_error - LSL.VKp * EXO.present_velocity_deg, -torque)
+                                                dxl_goal_current = int(round(torque_to_current(corrected_goal_torque)))  
+                                            else:
+                                                dxl_goal_current = int(round(torque_to_current(goal_torque)))  
+                                                previous_torque_error = torque_error
+                                                EXO.demanded_torque = corrected_goal_torque
+                                    else:
+                                        dxl_goal_current = int(round(torque_to_current(goal_torque))) 
+                                        EXO.desired_torque = goal_torque
+
                             EXO.write_current(dxl_goal_current)
                             freq = 1 / (current_time - previous_time)
                             if not skip_first_freq:    
@@ -269,7 +300,7 @@ if __name__ == "__main__":
                         force_value = struct.unpack('f', raw_bytes)[0]
                         force_value = -force_value
                         ser.reset_input_buffer()
-                        EXO.present_force = force_value * LSL.lever
+                        EXO.present_torque = force_value * LSL.lever
                         force.append(force_value)
 
                     previous_time = current_time
