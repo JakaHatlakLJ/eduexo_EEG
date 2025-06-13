@@ -173,7 +173,6 @@ if __name__ == "__main__":
         )
         LSL_inlet_thread.start()
 
-
         LSL.timestamp = 0
         previous_timestamp = 0
         LSL.torque_profile = 0
@@ -186,6 +185,7 @@ if __name__ == "__main__":
         center_offset = setup_dict["center_offset"]
         edge_offset = setup_dict["edge_offset"]
         previous_torque_error = 0
+        v_threshold = 5 * EXO.min_calculated_velocity
 
         try:
             # Enable Torque and set Bus Watchdog
@@ -223,12 +223,12 @@ if __name__ == "__main__":
                             y_list_time = profiles_time_dict[LSL.torque_profile]
                             direction = LSL.direction
                             correctness = LSL.correctness
-                            torque = round(LSL.torque, 3)
+                            max_torque = round(LSL.torque, 3)
 
                             i = 0
                             execute = True
                             start_time = perf_counter()
-                            print(f"Torque Profile: {LSL.torque_profile}, Correctness: {correctness}, Direction: {direction}, torque level: {torque}")
+                            print(f"Torque Profile: {LSL.torque_profile}, Correctness: {correctness}, Direction: {direction}, torque level: {max_torque}")
                         
                     if present_position_deg < EXO.min_pos + edge_offset or EXO.max_pos - edge_offset < present_position_deg:
                         execute = False 
@@ -251,42 +251,60 @@ if __name__ == "__main__":
                                 else:
                                     if direction == 20:
                                         if correctness == 1:
-                                            goal_torque = torque * y_list_position[travel]
+                                            goal_torque = max_torque * y_list_position[travel]
                                         else:
                                             if not setup_dict["time_control"]:                                          
-                                                goal_torque = -torque * y_list_position[travel]
+                                                goal_torque = -max_torque * y_list_position[travel]
                                             else:
-                                                goal_torque = -torque * y_list_time[i]
+                                                goal_torque = -max_torque * y_list_time[i]
                                                 i += 1
                                     else:
                                         if correctness == 1:
-                                            goal_torque = -torque * y_list_position[travel]
+                                            goal_torque = -max_torque * y_list_position[travel]
                                         else:
                                             if not setup_dict["time_control"]:                                          
-                                                goal_torque = torque * y_list_position[travel]
+                                                goal_torque = max_torque * y_list_position[travel]
                                             else:
-                                                goal_torque = torque * y_list_time[i]
+                                                goal_torque = max_torque * y_list_time[i]
                                                 i += 1
-                                                
-                                                
+                                            
                                     EXO.desired_torque = goal_torque
+
                                     if LSL.PID_controller:
                                         if correctness == 0:
-                                            if abs(EXO.present_torque) > abs(goal_torque):
-                                                torque_error = (goal_torque - EXO.present_torque)
-                                                d_torque_error = (previous_torque_error - torque_error) / (current_time - previous_time)
-                                                if goal_torque >= 0:
-                                                    corrected_goal_torque = min(goal_torque + LSL.FKp * torque_error + LSL.FKd * d_torque_error - LSL.VKp * EXO.present_velocity_deg, torque)
-                                                else:
-                                                    corrected_goal_torque = max(goal_torque + LSL.FKp * torque_error + LSL.FKd * d_torque_error - LSL.VKp * EXO.present_velocity_deg, -torque)
-                                                dxl_goal_current = int(round(torque_to_current(corrected_goal_torque)))  
+                                            # if abs(EXO.measured_torque) > abs(goal_torque):
+                                                # Torque errors
+                                            torque_error = (goal_torque - EXO.measured_torque)
+                                            d_torque_error = (previous_torque_error - torque_error) / (current_time - previous_time)
+                                            previous_torque_error = torque_error
+
+                                            # Torque correction
+                                            force_term = LSL.FKp * torque_error + LSL.FKd * d_torque_error
+                                            
+                                            abs_velocity = abs(EXO.present_velocity_deg)
+                                            if abs_velocity <= v_threshold:
+                                                velocity_scale = 1 - abs_velocity / v_threshold         # 1 at zero speed, 0 at threshold
+                                                velocity_term = -LSL.VKp * EXO.present_velocity_deg * velocity_scale
                                             else:
-                                                dxl_goal_current = int(round(torque_to_current(goal_torque)))  
-                                                previous_torque_error = torque_error
-                                                EXO.demanded_torque = corrected_goal_torque
+                                                velocity_term = 0
+
+                                            # Corrected torque
+                                            corrected_goal_torque = goal_torque + force_term + velocity_term
+
+                                            if goal_torque >= 0:
+                                                corrected_goal_torque = max(0, min(corrected_goal_torque, max_torque))
+                                            else:
+                                                corrected_goal_torque = min(0, max(corrected_goal_torque, -max_torque))
+
+                                            dxl_goal_current = int(round(torque_to_current(corrected_goal_torque)))  
+                                            EXO.demanded_torque = corrected_goal_torque
+
+                                            # else:
+                                            #     dxl_goal_current = int(round(torque_to_current(goal_torque)))  
+                                            #     EXO.demanded_torque = goal_torque
                                     else:
                                         dxl_goal_current = int(round(torque_to_current(goal_torque))) 
-                                        EXO.desired_torque = goal_torque
+                                        EXO.demanded_torque = goal_torque
 
                             EXO.write_current(dxl_goal_current)
                             freq = 1 / (current_time - previous_time)
@@ -300,7 +318,7 @@ if __name__ == "__main__":
                         force_value = struct.unpack('f', raw_bytes)[0]
                         force_value = -force_value
                         ser.reset_input_buffer()
-                        EXO.present_torque = force_value * LSL.lever
+                        EXO.measured_torque = force_value * LSL.lever
                         force.append(force_value)
 
                     previous_time = current_time

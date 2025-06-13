@@ -59,9 +59,7 @@ class SetupEXO:
     vel_unit = 0.229            # [rpm] = [dxl_unit] * [vel_unit]
     cur_unit = 2.69             # [mA]  = [dxl_unit] * [cur_unit]
 
-    # Initial settings (later replaced by user input values)
-    K_s = 0.07                  # [Nm/deg] Initial spring coefficient
-    K_d = 0.006
+    motor_backlash = 0.25       # [deg]
 
     # Setup LED
     led = LED(27)
@@ -93,6 +91,7 @@ class SetupEXO:
         self.BAUDRATE = BAUDRATE
         self.BAUDRATE_VALUE = SetupEXO.baud_dict[BAUDRATE]
         self.loop_frequency = loop_frequency
+        self.min_calculated_velocity = SetupEXO.motor_backlash * loop_frequency / 2
 
         # Bus Watchdog value
         self.watchdog_time = 10  # [1 unit = 20 ms]
@@ -126,6 +125,7 @@ class SetupEXO:
         self.execution = 0
         self.desired_torque = 0
         self.demanded_torque = 0
+        self.measured_torque = 0
         
     def find_current_baudrate(self):
         """Function for finding current baudrate"""

@@ -130,7 +130,7 @@ class LSLResolver:
             motor_instance.execution,               # Execution state
             motor_instance.desired_torque,          # Desired torque
             motor_instance.demanded_torque,         # Commanded torque
-            motor_instance.present_torque           # Current torque from force on Load-cell
+            motor_instance.measured_torque          # Current torque from force on Load-cell
         ]
 
         # Transmit the data sample to the stream
